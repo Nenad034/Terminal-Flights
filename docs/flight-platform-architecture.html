@@ -315,8 +315,13 @@ html{scroll-behavior:smooth;}
       <li><a href="#data"><span class="num">09</span>Data platforma</a></li>
       <li><a href="#security"><span class="num">10</span>Bezbednost &amp; compliance</a></li>
       <li><a href="#diferencijacija"><span class="num">11</span>Šta nas čini boljima</a></li>
-      <li><a href="#stack"><span class="num">12</span>Tehnološki stek</a></li>
-      <li><a href="#roadmap"><span class="num">13</span>Fazna realizacija</a></li>
+      <li><a href="#business-model"><span class="num">12</span>Poslovni model &amp; pricing</a></li>
+      <li><a href="#protection"><span class="num">13</span>Zaštita putnika &amp; bonding</a></li>
+      <li><a href="#competition"><span class="num">14</span>Konkurentska analiza</a></li>
+      <li><a href="#analytics"><span class="num">15</span>Analytics &amp; eksperimentisanje</a></li>
+      <li><a href="#localization"><span class="num">16</span>Lokalizacija &amp; pravni entiteti</a></li>
+      <li><a href="#stack"><span class="num">17</span>Tehnološki stek</a></li>
+      <li><a href="#roadmap"><span class="num">18</span>Fazna realizacija</a></li>
     </ol>
   </nav>
 
@@ -677,8 +682,100 @@ html{scroll-behavior:smooth;}
       </div>
     </section>
 
+    <section id="business-model">
+      <p class="section-kicker">12 — Prihodni model</p>
+      <h2>Poslovni model &amp; pricing</h2>
+      <p class="lede">Arhitektura ne znači ništa ako ne stoji iza jasnog odgovora na pitanje odakle dolazi prihod. Kombinujemo pet tokova prihoda, svaki sa drugačijom maržom i rizikom.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tok prihoda</th><th>Mehanika</th><th>Tipična marža</th><th>Rizik</th></tr></thead>
+          <tbody>
+            <tr><td>Markup na net fare</td><td>Razlika između neto cene dobavljača i prikazane cene korisniku</td><td>2–8% po ruti, dinamički po elastičnosti tražnje</td><td>Konkurenti sa istim izvorom mogu da budu jeftiniji ako je markup previsok</td></tr>
+            <tr><td>Service fee</td><td>Fiksna ili procentualna naknada prikazana odvojeno od cene karte</td><td>Fiksan iznos po rezervaciji</td><td>Transparentnost — mora biti jasno prikazano pre plaćanja (regulatorni zahtev u više jurisdikcija)</td></tr>
+            <tr><td>Ancillary komisija</td><td>Provizija na prtljag, sedišta, osiguranje putovanja, transfer, rent-a-car</td><td>10–30% na osiguranje i transfere</td><td>Zavisi od volumena, zahteva dobar cross-sell UX u checkoutu</td></tr>
+            <tr><td>Affiliate/referral</td><td>Hotel, rent-a-car, vize preko partnerskih programa u post-booking fazi</td><td>Provizija po konverziji</td><td>Nizak prioritet ali skoro bez operativnog troška</td></tr>
+            <tr><td>White-label / partner API</td><td>Mesečna pretplata + naknada po transakciji za druge agencije koje koriste naš stek</td><td>SaaS marža, visoka nakon dostizanja skale</td><td>Zahteva SLA, multi-tenant izolaciju i sopstvenu podršku za partnere</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Transparentnost cene</h3>
+      <p>Prikaz cene mora eksplicitno razdvojiti <code>fare</code> / <code>takse</code> / <code>service fee</code> — ne samo zbog poverenja korisnika, nego jer to zahtevaju propisi u više jurisdikcija (npr. EU pravila o transparentnosti cena avio-karata, US DOT full-fare advertising rule). Dinamički markup po ruti/tražnji se implementira kroz pricing engine u Search &amp; Shopping domenu, ali granica marže (min/max) mora biti poslovno pravilo koje se ne menja bez odobrenja finansija.</p>
+    </section>
+
+    <section id="protection">
+      <p class="section-kicker">13 — Regulatorna obaveza</p>
+      <h2>Zaštita putnika &amp; finansijsko obezbeđenje</h2>
+      <p class="lede">Ovo je deo koji najviše startapa preskoči, a koji je zakonska prepreka za rast — posebno čim se let poveže sa hotelom ili rent-a-car uslugom u jedan paket.</p>
+      <ul>
+        <li><strong>EU Package Travel Directive (2015/2302)</strong> — čim korisnik kupi let + još jednu putnu uslugu (hotel, transfer, rent-a-car) od nas kao paket, postajemo "organizator putovanja" i moramo obezbediti insolvency protection (bonding, trust račun ili osiguranje) da bi putnik dobio novac nazad ako firma propadne pre putovanja</li>
+        <li><strong>Nacionalne sheme</strong> — UK ATOL, nemački Reisesicherungsschein i slični lokalni mehanizmi; sistem treba da prati koje tržište zahteva koju vrstu pokrića</li>
+        <li><strong>IATA finansijska garancija</strong> — BSP/ARC akreditacija zahteva bankarsku garanciju ili osiguranje proporcionalno očekivanom prometu; mora se pratiti i obnavljati sa rastom obima prodaje</li>
+        <li><strong>Segregacija sredstava korisnika (trust/client money account)</strong> — novac primljen za buduća putovanja drži se odvojeno od operativnih sredstava firme, ne koristi se za pokrivanje tekućih troškova</li>
+        <li><strong>EU261 / US DOT prava putnika</strong> — kompenzacija za kašnjenje/otkazivanje leta; sistem treba automatski da detektuje kada je let kvalifikovan i proaktivno pokrene zahtev u ime putnika (dodatna diferencijacija iz poglavlja 11)</li>
+      </ul>
+      <div class="callout amber">
+        <span class="callout-label">Zašto ovo ide u arhitekturu, ne samo u pravni tim</span>
+        <p>Compliance status (paket vs. pojedinačna usluga, koje tržište, koji nivo pokrića) mora biti <strong>podatak koji sistem zna u trenutku checkouta</strong> — jer određuje da li se transakcija knjiži na operativni ili trust račun, i koji disclaimer se prikazuje korisniku. Ovo se modelira kao pravilo u finance/ledger sloju (poglavlje 08), ne kao naknadna ručna provera.</p>
+      </div>
+    </section>
+
+    <section id="competition">
+      <p class="section-kicker">14 — Tržišna pozicija</p>
+      <h2>Konkurentska analiza</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Igrač</th><th>Model</th><th>Prednost</th><th>Slabost koju iskorišćavamo</th></tr></thead>
+          <tbody>
+            <tr><td>Google Flights</td><td>Meta-search, ne prodaje direktno</td><td>Najbrža pretraga, ogroman saobraćaj</td><td>Preusmerava na drugi sajt za kupovinu — mi zadržavamo korisnika kroz ceo booking i post-sale ciklus</td></tr>
+            <tr><td>Skyscanner / Kiwi.com</td><td>Meta-search + virtuelno interlining</td><td>Odlična LCC kombinatorika</td><td>Slaba zaštita kod self-transfer itinerera (propušten konekcijski let = tvoj problem); mi to pokrivamo garancijom povezivanja</td></tr>
+            <tr><td>Booking.com Flights</td><td>OTA, let kao dodatak hotelskom biznisu</td><td>Ogromna baza korisnika, poverenje u brend</td><td>Let je sporedan proizvod — plitka post-sale podrška za avio specifične slučajeve (IRROPS, ADM); mi smo flight-first</td></tr>
+            <tr><td>Expedia</td><td>Puni OTA, sopstveni merchant model</td><td>Dinamičko paketovanje, loyalty (One Key)</td><td>Spor, generički support; naš proaktivni IRROPS i predictive pricing su brži put do poverenja</td></tr>
+            <tr><td>Klasične agencije (Amadeus/Sabre GDS agenti)</td><td>B2B, agent-asisted</td><td>Duboko poznavanje fare pravila, korporativni ugovori</td><td>Nema modernog self-service UX-a; mi nudimo isti nivo finansijske ozbiljnosti uz digitalni self-service</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Zaključak: prostor za diferencijaciju nije u tome da imamo "još jedan search box" — nego u kombinaciji <strong>direktne kupovine + duboke post-sale podrške + finansijske transparentnosti</strong>, gde većina konkurenata bira samo jedno od troje.</p>
+    </section>
+
+    <section id="analytics">
+      <p class="section-kicker">15 — Merenje proizvoda</p>
+      <h2>Analytics &amp; eksperimentisanje</h2>
+      <p class="lede">Ranking, pricing i UX odluke iz poglavlja 04 i 12 ne smeju se donositi "na oko" — treba im merljiv funnel i eksperimentalna infrastruktura odvojena od finansijskog sistema od poverenja.</p>
+      <div class="flow">
+        <div class="flow-step"><div class="k">search</div><div class="t">Upit poslat</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">results</div><div class="t">Rezultati prikazani</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">select</div><div class="t">Ponuda izabrana</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">checkout</div><div class="t">Podaci putnika uneti</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">payment</div><div class="t">Plaćanje pokušano</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">confirmed</div><div class="t">Tiket izdat</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h4>Feature flags &amp; A/B testing</h4><p>Eksperimenti na ranking algoritmu, pricing prikazu i checkout flow-u se voze kroz feature flag platformu (npr. LaunchDarkly ili interni ekvivalent), sa statistički validiranim uzorkom pre rollout-a.</p></div>
+        <div class="card"><h4>Ključne metrike</h4><p>Search-to-book konverzija po izvoru ponude, prosečna marža po rezervaciji (take rate), stopa napuštanja checkouta po koraku, NPS i stopa ponovljene kupovine.</p></div>
+        <div class="card"><h4>Odvojen data tok</h4><p>Analytics warehouse se puni iz istih Kafka event-ova kao i ledger, ali je <strong>read-only projekcija</strong> — nikad izvor istine za novac. Ledger (poglavlje 08) ostaje jedini system of record za finansije.</p></div>
+        <div class="card"><h4>Product-led signali</h4><p>Price-tracking pretplate, napušteni checkout retargeting, i signal za predictive pricing model (poglavlje 04) dele istu event taksonomiju kako bi se izbeglo dupliranje instrumentacije.</p></div>
+      </div>
+    </section>
+
+    <section id="localization">
+      <p class="section-kicker">16 — Multi-market</p>
+      <h2>Lokalizacija &amp; pravni entiteti</h2>
+      <ul>
+        <li><strong>i18n arhitektura</strong> — prevod sadržaja, formati datuma/valute/broja po lokalu, RTL podrška ako se širimo na tržišta koja to zahtevaju; fare/tax podaci se uvek čuvaju u kanonskom obliku i tek na prikazu lokalizuju</li>
+        <li><strong>Pravni entiteti po jurisdikciji</strong> — odluka da li poslujemo kroz jedan entitet sa lokalnim VAT registracijama ili kroz zasebne pravne entitete po ključnom tržištu (obično nužno kada lokalni zakon zahteva domaću travel agency licencu ili lokalni bonding iz poglavlja 13)</li>
+        <li><strong>Data residency</strong> — pojedina tržišta (npr. deo EU javnog sektora, pojedine zemlje van EU) zahtevaju da se podaci putnika čuvaju na lokalnoj teritoriji; data platforma (poglavlje 09) treba da podrži regionalnu particiju baze po potrebi</li>
+        <li><strong>Lokalna prava putnika</strong> — EU261 (kompenzacija za kašnjenje/otkazivanje u EU), US DOT pravila, i ekvivalenti na drugim tržištima se implementiraju kao pluggable rule set po jurisdikciji, ne kao hardkodovana logika</li>
+        <li><strong>Podrška na lokalnom jeziku</strong> — customer support tim ili AI-asistirana podrška mora pokriti jezike ključnih tržišta, posebno za IRROPS komunikaciju gde brzina razumevanja direktno utiče na poverenje putnika</li>
+      </ul>
+    </section>
+
     <section id="stack">
-      <p class="section-kicker">12 — Preporuka</p>
+      <p class="section-kicker">17 — Preporuka</p>
       <h2>Tehnološki stek</h2>
       <div class="table-wrap">
         <table>
@@ -697,7 +794,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="roadmap">
-      <p class="section-kicker">13 — Plan realizacije</p>
+      <p class="section-kicker">18 — Plan realizacije</p>
       <h2>Fazna realizacija</h2>
       <div class="phase">
         <div class="phase-tag">FAZA 1</div>
