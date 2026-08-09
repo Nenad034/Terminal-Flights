@@ -1,0 +1,737 @@
+<title>Terminal Flights — Arhitektura platforme</title>
+<style>
+@font-face{
+  font-family:'TF Mono Fallback';
+  src:local('Cascadia Code'),local('SF Mono'),local('Consolas');
+}
+:root{
+  --bg:#f4f5f8;
+  --surface:#ffffff;
+  --surface-alt:#eaecf2;
+  --surface-sunken:#e2e5ee;
+  --ink:#141822;
+  --ink-soft:#4d5566;
+  --ink-faint:#7c8394;
+  --line:#d7dbe4;
+  --line-soft:#e6e8ee;
+  --accent:#1f4fd6;
+  --accent-ink:#ffffff;
+  --accent-soft:#e3eaff;
+  --accent-soft-line:#c3d3ff;
+  --amber:#a9660f;
+  --amber-soft:#fbeed9;
+  --good:#137a4d;
+  --good-soft:#e1f3ea;
+  --bad:#b3372c;
+  --bad-soft:#fbe6e3;
+  --code-bg:#eef0f6;
+  --shadow: 0 1px 2px rgba(20,24,34,.06), 0 8px 24px -12px rgba(20,24,34,.18);
+  --font-display: 'Bahnschrift', 'SF Compact Condensed', 'Arial Narrow', 'Helvetica Neue Condensed', sans-serif;
+  --font-body: -apple-system, 'Segoe UI', 'SF Pro Text', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'TF Mono Fallback', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0f16;
+    --surface:#121623;
+    --surface-alt:#191f30;
+    --surface-sunken:#0a0d13;
+    --ink:#e8eaf2;
+    --ink-soft:#a9b0c4;
+    --ink-faint:#6b7288;
+    --line:#2a3146;
+    --line-soft:#20263a;
+    --accent:#7fa0ff;
+    --accent-ink:#0c0f16;
+    --accent-soft:#1c2848;
+    --accent-soft-line:#33448a;
+    --amber:#e0a854;
+    --amber-soft:#3a2d16;
+    --good:#5cd6a4;
+    --good-soft:#123425;
+    --bad:#ef8a7f;
+    --bad-soft:#3a1a16;
+    --code-bg:#171d2c;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c0f16;
+  --surface:#121623;
+  --surface-alt:#191f30;
+  --surface-sunken:#0a0d13;
+  --ink:#e8eaf2;
+  --ink-soft:#a9b0c4;
+  --ink-faint:#6b7288;
+  --line:#2a3146;
+  --line-soft:#20263a;
+  --accent:#7fa0ff;
+  --accent-ink:#0c0f16;
+  --accent-soft:#1c2848;
+  --accent-soft-line:#33448a;
+  --amber:#e0a854;
+  --amber-soft:#3a2d16;
+  --good:#5cd6a4;
+  --good-soft:#123425;
+  --bad:#ef8a7f;
+  --bad-soft:#3a1a16;
+  --code-bg:#171d2c;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:16px;
+  line-height:1.6;
+}
+::selection{ background:var(--accent-soft); color:var(--ink); }
+
+.skip{position:absolute;left:-9999px;}
+a{color:var(--accent);}
+a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:1px solid var(--line);
+  background:
+    linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  padding:3.2rem 1.5rem 2.6rem;
+}
+.masthead-inner{max-width:1180px; margin:0 auto;}
+.eyebrow-row{
+  display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
+  font-family:var(--font-mono); font-size:.72rem; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--ink-faint); margin-bottom:1.1rem;
+}
+.eyebrow-row .dot{width:5px;height:5px;border-radius:50%;background:var(--ink-faint);}
+.eyebrow-row .tag{
+  border:1px solid var(--line); border-radius:3px; padding:.15rem .5rem;
+  color:var(--accent); border-color:var(--accent-soft-line); background:var(--accent-soft);
+}
+h1.doc-title{
+  font-family:var(--font-display); font-weight:700;
+  font-size:clamp(2.3rem, 4.6vw, 3.6rem);
+  letter-spacing:.005em;
+  margin:0 0 .7rem;
+  text-wrap:balance;
+  color:var(--ink);
+}
+.doc-sub{
+  max-width:62ch; color:var(--ink-soft); font-size:1.08rem; margin:0 0 1.6rem;
+}
+.meta-strip{
+  display:flex; flex-wrap:wrap; gap:1.6rem 2.4rem;
+  border-top:1px solid var(--line-soft); padding-top:1.2rem;
+  font-size:.85rem;
+}
+.meta-strip dt{font-family:var(--font-mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); margin-bottom:.2rem;}
+.meta-strip dd{margin:0; color:var(--ink); font-weight:600;}
+
+/* ---------- layout ---------- */
+.doc-layout{
+  max-width:1180px; margin:0 auto; padding:2.4rem 1.5rem 6rem;
+  display:grid; grid-template-columns: 240px minmax(0,1fr); gap:3.2rem;
+  align-items:start;
+}
+@media (max-width: 880px){
+  .doc-layout{grid-template-columns: 1fr;}
+  .toc{position:static; max-height:none; order:2;}
+}
+.toc{
+  position:sticky; top:1.5rem; max-height:calc(100vh - 3rem); overflow-y:auto;
+  font-size:.85rem; padding-right:.5rem;
+}
+.toc-label{font-family:var(--font-mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-faint); margin:0 0 .8rem;}
+.toc ol{list-style:none; margin:0; padding:0;}
+.toc > ol > li{margin-bottom:.15rem;}
+.toc a{
+  display:block; padding:.32rem .6rem; border-radius:6px; color:var(--ink-soft); text-decoration:none;
+  border-left:2px solid transparent;
+}
+.toc a:hover{background:var(--surface-alt); color:var(--ink);}
+.toc .num{font-family:var(--font-mono); color:var(--ink-faint); margin-right:.4rem; font-size:.8em;}
+
+main{min-width:0;}
+
+section{padding-top:.4rem; margin-bottom:3.6rem; scroll-margin-top:1.5rem;}
+section:first-child{padding-top:0;}
+.section-kicker{
+  font-family:var(--font-mono); font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 .4rem;
+}
+h2{
+  font-family:var(--font-display); font-weight:700; font-size:1.9rem; letter-spacing:.003em;
+  margin:0 0 1rem; text-wrap:balance; padding-bottom:.7rem; border-bottom:1px solid var(--line);
+}
+h3{font-family:var(--font-display); font-weight:700; font-size:1.28rem; margin:2rem 0 .7rem;}
+h4{font-size:1.02rem; font-weight:700; margin:1.4rem 0 .5rem; color:var(--ink);}
+p{margin:0 0 1rem; max-width:74ch; color:var(--ink-soft);}
+p strong, li strong{color:var(--ink); font-weight:650;}
+ul,ol{margin:0 0 1.1rem; padding-left:1.3rem; max-width:74ch;}
+li{margin-bottom:.4rem; color:var(--ink-soft);}
+li::marker{color:var(--ink-faint);}
+code{
+  font-family:var(--font-mono); font-size:.86em; background:var(--code-bg); color:var(--accent);
+  padding:.1em .38em; border-radius:4px;
+}
+
+.lede{font-size:1.12rem; color:var(--ink-soft); max-width:70ch;}
+
+/* ---------- callouts ---------- */
+.callout{
+  border:1px solid var(--line); border-left:3px solid var(--accent); background:var(--surface);
+  border-radius:8px; padding:1rem 1.2rem; margin:1.3rem 0; box-shadow:var(--shadow);
+}
+.callout.amber{border-left-color:var(--amber);}
+.callout.good{border-left-color:var(--good);}
+.callout p:last-child{margin-bottom:0;}
+.callout-label{
+  font-family:var(--font-mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--accent); margin-bottom:.4rem; display:block;
+}
+.callout.amber .callout-label{color:var(--amber);}
+.callout.good .callout-label{color:var(--good);}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto; margin:1.3rem 0 1.8rem; border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow);}
+table{border-collapse:collapse; width:100%; min-width:760px; font-size:.88rem; background:var(--surface);}
+thead th{
+  text-align:left; font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--ink-faint); background:var(--surface-alt); padding:.75rem .9rem; border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+tbody td{padding:.75rem .9rem; border-bottom:1px solid var(--line-soft); color:var(--ink-soft); vertical-align:top;}
+tbody tr:last-child td{border-bottom:none;}
+tbody td:first-child{color:var(--ink); font-weight:650; white-space:nowrap;}
+tbody tr:hover{background:var(--surface-alt);}
+td .fine{display:block; font-size:.78rem; color:var(--ink-faint); margin-top:.15rem;}
+
+.pill{
+  display:inline-block; font-family:var(--font-mono); font-size:.72rem; padding:.1rem .5rem; border-radius:99px;
+  border:1px solid var(--line);
+}
+.pill.good{color:var(--good); background:var(--good-soft); border-color:transparent;}
+.pill.bad{color:var(--bad); background:var(--bad-soft); border-color:transparent;}
+.pill.amber{color:var(--amber); background:var(--amber-soft); border-color:transparent;}
+
+/* ---------- diagram (css boxes) ---------- */
+.stack{
+  border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow);
+  padding:1.4rem; margin:1.6rem 0 2rem;
+}
+.stack-tier{
+  border:1px dashed var(--line); border-radius:10px; padding:.9rem 1rem; margin-bottom:.8rem;
+}
+.stack-tier:last-child{margin-bottom:0;}
+.stack-tier-label{
+  font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--ink-faint); margin-bottom:.6rem; display:flex; align-items:center; gap:.5rem;
+}
+.stack-tier-label .n{color:var(--accent); font-weight:700;}
+.chips{display:flex; flex-wrap:wrap; gap:.5rem;}
+.chip{
+  background:var(--surface-alt); border:1px solid var(--line); border-radius:7px; padding:.45rem .7rem;
+  font-size:.82rem; color:var(--ink); font-weight:600;
+}
+.chip.accent{background:var(--accent-soft); border-color:var(--accent-soft-line); color:var(--accent);}
+.chip .fine{display:block; font-weight:400; color:var(--ink-faint); font-size:.72rem; margin-top:.1rem;}
+.arrow-down{
+  text-align:center; color:var(--ink-faint); font-family:var(--font-mono); font-size:.85rem; margin:.15rem 0;
+}
+
+/* ---------- flow ---------- */
+.flow{
+  display:flex; flex-wrap:wrap; align-items:stretch; gap:.4rem; margin:1.4rem 0 1.8rem;
+}
+.flow-step{
+  flex:1 1 140px; background:var(--surface); border:1px solid var(--line); border-radius:9px;
+  padding:.8rem .9rem; box-shadow:var(--shadow);
+}
+.flow-step .k{font-family:var(--font-mono); color:var(--accent); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;}
+.flow-step .t{font-weight:650; margin-top:.25rem; font-size:.92rem;}
+.flow-sep{display:flex; align-items:center; justify-content:center; color:var(--ink-faint); font-size:1.1rem; padding:0 .1rem;}
+
+/* ---------- two col ---------- */
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin:1.3rem 0;}
+@media (max-width:700px){.grid-2{grid-template-columns:1fr;}}
+.card{border:1px solid var(--line); border-radius:10px; padding:1.1rem 1.2rem; background:var(--surface); box-shadow:var(--shadow);}
+.card h4{margin-top:0;}
+.card p{margin-bottom:0;}
+
+/* ---------- roadmap ---------- */
+.phase{display:grid; grid-template-columns:120px 1fr; gap:1rem; border-top:1px solid var(--line-soft); padding:1.1rem 0;}
+.phase:first-of-type{border-top:1px solid var(--line);}
+.phase-tag{font-family:var(--font-mono); font-size:.78rem; color:var(--accent); font-weight:700; padding-top:.15rem;}
+.phase-body h4{margin:0 0 .3rem;}
+.phase-body p{margin-bottom:.5rem;}
+
+footer.doc-footer{
+  border-top:1px solid var(--line); margin-top:2rem; padding-top:1.4rem;
+  color:var(--ink-faint); font-size:.82rem;
+}
+
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto !important;} }
+html{scroll-behavior:smooth;}
+</style>
+
+<a class="skip" href="#main-content">Preskoči na sadržaj</a>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="eyebrow-row">
+      <span class="tag">INTERNI DOKUMENT</span>
+      <span class="dot"></span><span>Terminal Flights</span>
+      <span class="dot"></span><span>Arhitektura platforme v1.0</span>
+    </div>
+    <h1 class="doc-title">Arhitektura platforme za pretragu i rezervaciju letova</h1>
+    <p class="doc-sub">Kompletna tehnička i poslovna arhitektura — od agregacije GDS/NDC ponuda do knjigovodstva i BSP obračuna — građena da pokrije ono što rade Amadeus, Sabre, Travelport, Travelfusion i Duffel, i da ide korak dalje.</p>
+    <dl class="meta-strip">
+      <div><dt>Datum</dt><dd>09. avgust 2026.</dd></div>
+      <div><dt>Status</dt><dd>Nacrt za tehničku reviziju</dd></div>
+      <div><dt>Obim</dt><dd>Search · Booking · Finansije · Compliance</dd></div>
+      <div><dt>Vlasnik</dt><dd>Arhitektura proizvoda</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="doc-layout">
+  <nav class="toc" aria-label="Sadržaj">
+    <p class="toc-label">Sadržaj</p>
+    <ol>
+      <li><a href="#uvod"><span class="num">00</span>Uvod i teza</a></li>
+      <li><a href="#pejzaz"><span class="num">01</span>Pejzaž provajdera</a></li>
+      <li><a href="#arhitektura"><span class="num">02</span>Referentna arhitektura</a></li>
+      <li><a href="#supplier-layer"><span class="num">03</span>Supplier abstraction layer</a></li>
+      <li><a href="#search"><span class="num">04</span>Search &amp; Shopping</a></li>
+      <li><a href="#booking"><span class="num">05</span>Booking &amp; Order</a></li>
+      <li><a href="#payments"><span class="num">06</span>Plaćanja &amp; tiketing</a></li>
+      <li><a href="#postsale"><span class="num">07</span>Post-sale &amp; IRROPS</a></li>
+      <li><a href="#finance"><span class="num">08</span>Finansije &amp; računovodstvo</a></li>
+      <li><a href="#data"><span class="num">09</span>Data platforma</a></li>
+      <li><a href="#security"><span class="num">10</span>Bezbednost &amp; compliance</a></li>
+      <li><a href="#diferencijacija"><span class="num">11</span>Šta nas čini boljima</a></li>
+      <li><a href="#stack"><span class="num">12</span>Tehnološki stek</a></li>
+      <li><a href="#roadmap"><span class="num">13</span>Fazna realizacija</a></li>
+    </ol>
+  </nav>
+
+  <main id="main-content">
+
+    <section id="uvod">
+      <p class="section-kicker">00 — Uvod</p>
+      <h2>Uvod i teza</h2>
+      <p class="lede">Cilj je platforma koja ne zavisi od jednog izvora sadržaja, koja spaja puni GDS inventar (full-service avio-kompanije), NDC direktne konekcije i low-cost agregatore u jedan konzistentan rezultat pretrage — i koja ima ozbiljan finansijski sloj iza sebe (BSP/ARC obračun, knjiženje, PDV, refundacije), jer upravo taj sloj razdvaja "booking widget" od agencije koja može da posluje na nivou IATA standarda.</p>
+      <p>Dokument je podeljen u tri celine: <strong>(1)</strong> analiza postojećih API provajdera i šta uzimamo od svakog, <strong>(2)</strong> tehnička arhitektura sistema po domenima, <strong>(3)</strong> finansijsko-računovodstveni sloj i dodatne poslovne funkcije bez kojih nijedna ozbiljna OTA (Online Travel Agency) ne može da posluje.</p>
+      <div class="callout">
+        <span class="callout-label">Ključna arhitektonska odluka</span>
+        <p>Nijedan pojedinačni provajder (Amadeus, Sabre, Travelport, Travelfusion, Duffel) ne pokriva 100% tržišta niti nudi najbolje uslove za svaki segment. Zato gradimo <strong>sloj apstrakcije dobavljača</strong> (supplier abstraction layer) koji normalizuje ponude iz više izvora u jedan interni model, umesto da se aplikacija veže direktno na jedan SDK.</p>
+      </div>
+    </section>
+
+    <section id="pejzaz">
+      <p class="section-kicker">01 — Istraživanje tržišta</p>
+      <h2>Pejzaž API provajdera</h2>
+      <p class="lede">Pregled pet ključnih sistema koje smo analizirali, plus NDC standard i LCC agregatori koji ih dopunjuju.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Provajder</th><th>Tip pristupa</th><th>Pokrivenost</th><th>NDC / Order model</th><th>Naplata &amp; akreditacija</th><th>Najbolje za</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Amadeus<span class="fine">Self-Service + Enterprise</span></td>
+              <td>REST (Self-Service, ~40 API-ja) i SOAP/XML (Enterprise, pun GDS)</td>
+              <td>~480 avio-kompanija, dominantan u Evropi</td>
+              <td><span class="pill amber">delimično</span> Amadeus NDC-X kao nadogradnja</td>
+              <td>Enterprise nivo traži IATA/BSP akreditaciju agencije; Self-Service ima freemium/pay-as-you-go tier</td>
+              <td>Širinu evropskog i globalnog full-service inventara, kompleksne fare pravila</td>
+            </tr>
+            <tr>
+              <td>Sabre</td>
+              <td>REST + SOAP (Sabre Dev Studio), Sabre Red 360 za agente</td>
+              <td>~400 avio-kompanija, jak u SAD i Latinskoj Americi</td>
+              <td><span class="pill amber">delimično</span> Sabre Order Management (NDC)</td>
+              <td>Zahteva PCC (Pseudo City Code) i EPR ugovor; naplata po transakciji/segmentu</td>
+              <td>Severnoameričko tržište, korporativni travel, robusne booking/queue alate</td>
+            </tr>
+            <tr>
+              <td>Travelport<span class="fine">(Galileo, Worldspan, Apollo → uAPI / Travelport+)</span></td>
+              <td>uAPI (XML) u gašenju → JSON API "Travelport+"</td>
+              <td>~400 avio-kompanija</td>
+              <td><span class="pill good">da</span> Travelport+ je NDC-first arhitektura</td>
+              <td>Travel agency akreditacija (IATAN/ARC/BSP), tiered pricing</td>
+              <td>Leisure i korporativne agencije koje već imaju GDS ugovor; low-cost content preko Rich Content &amp; Branding</td>
+            </tr>
+            <tr>
+              <td>Travelfusion</td>
+              <td>XML/REST direktne konekcije po avio-kompaniji</td>
+              <td>~450+ avio-kompanija, specijalizacija za <strong>low-cost carriers</strong> (Ryanair, Wizz Air, easyJet, Vueling…)</td>
+              <td><span class="pill bad">ne</span> — direktne konekcije, ne NDC standard</td>
+              <td>Naplata po pretrazi/rezervaciji; svaka avio-kompanija ima svoj payment/ticketing flow (virtuelne kartice ili merchant model)</td>
+              <td>LCC sadržaj koji GDS-ovi tradicionalno ne pokrivaju dobro (bez BSP tiketa, direktna naplata karticom)</td>
+            </tr>
+            <tr>
+              <td>Duffel</td>
+              <td>Moderan REST/JSON API, sandbox u realnom vremenu</td>
+              <td>~300+ avio-kompanija i raste, uključuje NDC i LCC agregaciju</td>
+              <td><span class="pill good">da</span> — NDC-native "Order" model od starta, bez legacy PNR sloja</td>
+              <td>Nije potrebna sopstvena IATA akreditacija — Duffel je sam akreditovan i deluje kao merchant of record; naplata po rezervaciji + payment fee</td>
+              <td>Brz go-to-market, developer experience, startape bez GDS ugovora; Duffel Payments i Duffel Stays kao dodatak</td>
+            </tr>
+            <tr>
+              <td>NDC direktno<span class="fine">(IATA New Distribution Capability)</span></td>
+              <td>XML/JSON standard, po avio-kompaniji ili preko agregatora (Verteil, Farelogix/OpenJaw)</td>
+              <td>Zavisi od avio-kompanije koja ga implementira</td>
+              <td><span class="pill good">da</span> — ovo je sam standard</td>
+              <td>Direktan ugovor sa avio-kompanijom ili preko NDC agregatora</td>
+              <td>Pristup ekskluzivnim NDC fare-ovima (branded fares, personalizovane ponude) koje GDS API ne vidi bez nadoplate</td>
+            </tr>
+            <tr>
+              <td>LCC meta-agregatori<span class="fine">(Kiwi.com Tequila, Skyscanner API)</span></td>
+              <td>REST, virtuelno interlining (kombinovanje nezavisnih letova)</td>
+              <td>Kombinuje LCC i full-service letove koji nemaju zajednički interline ugovor</td>
+              <td>N/A</td>
+              <td>Revenue share / affiliate ili API fee</td>
+              <td>"Self-transfer" itinerere — jeftinije kombinacije koje GDS ne može da poveže</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout amber">
+        <span class="callout-label">Zaključak istraživanja</span>
+        <p>Nijedan sistem sam po sebi nije "najbolji od svih". GDS trojka (Amadeus/Sabre/Travelport) daje dubinu i pouzdanost full-service sadržaja ali nosi legacy XML/SOAP kompleksnost i visoke troškove akreditacije. Duffel daje najbolji developer experience i najbrži start ali mu treba vreme da dostigne širinu GDS pokrivenosti. Travelfusion pokriva LCC prazninu koju GDS-ovi istorijski loše rade. Zaključak: <strong>agregacija iz više izvora s pametnim de-duplication i ranking slojem pobeđuje bilo koji pojedinačni ugovor.</strong></p>
+      </div>
+    </section>
+
+    <section id="arhitektura">
+      <p class="section-kicker">02 — Sistemski dizajn</p>
+      <h2>Referentna arhitektura</h2>
+      <p class="lede">Slojevita arhitektura: klijenti govore sa domenskim servisima preko API gateway-a; domenski servisi nikad direktno ne pozivaju GDS/NDC provajdere — uvek preko supplier abstraction layer-a; finansijski sloj je odvojen i tretiran kao sistem od poverenja (system of record za novac).</p>
+
+      <div class="stack">
+        <div class="stack-tier">
+          <div class="stack-tier-label"><span class="n">01</span>Klijenti</div>
+          <div class="chips">
+            <div class="chip">Web app <span class="fine">React/Next</span></div>
+            <div class="chip">Mobilna app <span class="fine">iOS / Android</span></div>
+            <div class="chip">Agent desktop <span class="fine">back-office</span></div>
+            <div class="chip">Partner / White-label API <span class="fine">B2B2C</span></div>
+          </div>
+        </div>
+        <div class="arrow-down">↓ API Gateway · auth · rate limiting · BFF ↓</div>
+        <div class="stack-tier">
+          <div class="stack-tier-label"><span class="n">02</span>Domenski servisi (core)</div>
+          <div class="chips">
+            <div class="chip accent">Search &amp; Shopping</div>
+            <div class="chip accent">Order / Booking</div>
+            <div class="chip accent">Payments &amp; Ticketing</div>
+            <div class="chip accent">Post-sale &amp; IRROPS</div>
+            <div class="chip accent">Ancillaries</div>
+            <div class="chip accent">Loyalty</div>
+            <div class="chip accent">CRM / Support</div>
+            <div class="chip accent">Fraud &amp; Risk</div>
+            <div class="chip accent">Notifications</div>
+          </div>
+        </div>
+        <div class="arrow-down">↓ interni event bus (Kafka) + sinhroni REST/gRPC ↓</div>
+        <div class="stack-tier">
+          <div class="stack-tier-label"><span class="n">03</span>Supplier abstraction layer</div>
+          <div class="chips">
+            <div class="chip">Amadeus adapter</div>
+            <div class="chip">Sabre adapter</div>
+            <div class="chip">Travelport adapter</div>
+            <div class="chip">Travelfusion adapter</div>
+            <div class="chip">Duffel adapter</div>
+            <div class="chip">NDC direct adapters</div>
+          </div>
+        </div>
+        <div class="arrow-down">↓ finansijski sloj — nezavisan system of record ↓</div>
+        <div class="stack-tier">
+          <div class="stack-tier-label"><span class="n">04</span>Finansije &amp; računovodstvo</div>
+          <div class="chips">
+            <div class="chip">Ledger service <span class="fine">double-entry</span></div>
+            <div class="chip">BSP/ARC obračun</div>
+            <div class="chip">Tax / VAT engine</div>
+            <div class="chip">FX &amp; multi-currency</div>
+            <div class="chip">Invoicing</div>
+            <div class="chip">Reconciliation</div>
+            <div class="chip">ERP export</div>
+          </div>
+        </div>
+        <div class="arrow-down">↓ data platforma ↓</div>
+        <div class="stack-tier">
+          <div class="stack-tier-label"><span class="n">05</span>Data &amp; infrastruktura</div>
+          <div class="chips">
+            <div class="chip">OLTP <span class="fine">Postgres</span></div>
+            <div class="chip">Fare cache <span class="fine">Redis</span></div>
+            <div class="chip">Search index <span class="fine">OpenSearch</span></div>
+            <div class="chip">Event bus <span class="fine">Kafka</span></div>
+            <div class="chip">Data warehouse <span class="fine">Snowflake/BigQuery</span></div>
+            <div class="chip">Object storage <span class="fine">S3</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p>Sve što je van jezgra — observability, IAM, secrets, CI/CD — presecaju sve slojeve horizontalno i opisano je u poglavlju 10.</p>
+    </section>
+
+    <section id="supplier-layer">
+      <p class="section-kicker">03 — Integracioni sloj</p>
+      <h2>Supplier abstraction layer</h2>
+      <p class="lede">Svaki provajder ima svoj model podataka (Amadeus i Sabre i dalje govore "PNR", Duffel i NDC govore "Order"). Adapter po provajderu prevodi u <strong>zajednički interni model ponude i rezervacije</strong>, tako da domenski servisi iznad njega nikad ne znaju odakle je let došao.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h4>Odgovornosti adaptera</h4>
+          <p>Mapiranje odgovora u interni <code>OfferModel</code>; normalizacija cena, taksi i fare pravila; upravljanje sopstvenim rate limitom i retry/backoff logikom; keširanje sirovih odgovora radi audit traga.</p>
+        </div>
+        <div class="card">
+          <h4>Zajednički interni model</h4>
+          <p><code>Offer</code> → segmenti, cene (base/tax/total), fare rules (refundable, changeable, bagaž), <code>Order</code> → putnici, plaćanje, tiket brojevi, status po dobavljaču mapiran na interni enum.</p>
+        </div>
+        <div class="card">
+          <h4>Search orchestrator</h4>
+          <p>Paralelno pita sve relevantne adaptere (timeout budžet npr. 3.5s po dobavljaču), de-duplicira identične letove po različitim izvorima i bira najjeftiniji/najpouzdaniji izvor za taj let, rangira rezultate.</p>
+        </div>
+        <div class="card">
+          <h4>Cost governance</h4>
+          <p>GDS provajderi naplaćuju po <em>search</em> pozivu (booking fee incentive model) — zato je agresivno keširanje fare-ova (TTL 2–5 min) direktno finansijska odluka, ne samo performansna.</p>
+        </div>
+      </div>
+
+      <div class="callout good">
+        <span class="callout-label">Zašto ovo pobeđuje "single-GDS" pristup</span>
+        <p>Amadeus/Sabre/Travelport agencije tipično vide samo sadržaj sopstvenog GDS-a. Mi paralelno upitavamo GDS + Duffel (NDC/LCC) + Travelfusion (LCC direct), pa korisnik dobija i tradicionalne fare-ove i low-cost opcije u istoj listi rezultata — što npr. Expedia/Booking rade tek delimično.</p>
+      </div>
+    </section>
+
+    <section id="search">
+      <p class="section-kicker">04 — Domen</p>
+      <h2>Search &amp; Shopping</h2>
+      <div class="flow">
+        <div class="flow-step"><div class="k">01 upit</div><div class="t">Normalizacija ruta, datuma, putničkog miksa</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">02 fan-out</div><div class="t">Paralelni pozivi ka svim adapterima</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">03 merge</div><div class="t">De-dup, normalizacija valuta, ranking</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">04 price freeze</div><div class="t">Kratkotrajni lock cene (60–120s) pre checkouta</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">05 revalidacija</div><div class="t">Live re-price kod dobavljača pre plaćanja</div></div>
+      </div>
+      <p>Ranking ne sme biti samo "najjeftinije prvo" — uključuje pouzdanost dobavljača (koliko često cena "pukne" pri revalidaciji), on-time performance avio-kompanije, broj presedanja i self-transfer rizik (kad se kombinuju dva odvojena tiketa bez zaštite u slučaju zakašnjenja).</p>
+      <h3>Fare cache i price-tracking</h3>
+      <p>Redis fare cache sa TTL po tipu dobavljača; istorijski podaci cena po ruti idu u data warehouse za <strong>predictive pricing</strong> (predlog "kupi sad" vs "sačekaj") — ovo je funkcija koju retko koja OTA radi dobro, a direktno utiče na konverziju.</p>
+    </section>
+
+    <section id="booking">
+      <p class="section-kicker">05 — Domen</p>
+      <h2>Booking &amp; Order</h2>
+      <p class="lede">Booking servis je orkestrator transakcije koja mora biti atomична preko više sistema koji to nativno ne garantuju (GDS PNR + payment gateway + interni ledger).</p>
+      <h3>Saga umesto distribuirane transakcije</h3>
+      <p>Koristimo saga pattern sa kompenzacionim koracima: <code>rezerviši PNR/Order kod dobavljača</code> → <code>autorizuj plaćanje</code> → <code>izdaj tiket (issue ticket)</code> → <code>upiši u ledger</code>. Ako bilo koji korak padne, prethodni se poništavaju (void PNR, refund autorizacije) i korisnik dobija jasnu poruku umesto "zaglavljene" rezervacije.</p>
+      <h3>Ancillaries (dodatne usluge)</h3>
+      <ul>
+        <li>Izbor sedišta, prtljag, obroci, prioritetni ukrcaj — mapirani preko dobavljača na interni katalog ancillary usluga</li>
+        <li>Sopstvene ancillary usluge (osiguranje putovanja, transfer do aerodroma, parking) — naša marža, ne zavisi od GDS-a</li>
+        <li>Dinamičko paketovanje (flight + hotel + rent-a-car) kroz zaseban Packaging servis</li>
+      </ul>
+    </section>
+
+    <section id="payments">
+      <p class="section-kicker">06 — Domen</p>
+      <h2>Plaćanja &amp; tiketing</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Merchant of record model</h4>
+          <p>Odlučujemo po dobavljaču: kod Duffel-a i Travelfusion-a oni su MoR i skidaju sredstva sa korisnika direktno; kod GDS enterprise pristupa mi smo MoR i plaćamo avio-kompaniju preko BSP/ARC. Ovo direktno oblikuje PCI scope i knjiženje (poglavlje 08).</p>
+        </div>
+        <div class="card">
+          <h4>PCI DSS &amp; 3DS2/SCA</h4>
+          <p>Tokenizacija kartica preko payment gateway-a (Stripe/Adyen/Checkout.com), nikad ne čuvamo PAN u sopstvenoj bazi (SAQ A scope). 3D Secure 2 obavezan za EU (PSD2 SCA).</p>
+        </div>
+        <div class="card">
+          <h4>Virtuelne kartice (VCC)</h4>
+          <p>Za LCC avio-kompanije koje ne primaju BSP tiket, plaćanje ide preko jednokratne virtuelne kartice generisane po rezervaciji — smanjuje rizik od zloupotrebe i olakšava rekonsilijaciju 1:1.</p>
+        </div>
+        <div class="card">
+          <h4>Ticketing engine</h4>
+          <p>Automatski issue tiketa odmah nakon potvrde plaćanja (real-time ticketing), sa fallback queue-om za slučajeve kad dobavljač zahteva manuelni queue placement (npr. čekanje na etket kod određenih GDS fare klasa).</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="postsale">
+      <p class="section-kicker">07 — Domen</p>
+      <h2>Post-sale &amp; IRROPS</h2>
+      <p class="lede">Ono što se dešava posle kupovine tiketa je gde većina low-budget booking platformi propada, a gde ozbiljna agencija gradi poverenje.</p>
+      <ul>
+        <li><strong>Izmene/otkazivanja</strong> — provera fare pravila, obračun penala, re-izdavanje preko istog dobavljača koji je originalno izdao tiket</li>
+        <li><strong>Refundi</strong> — automatski workflow: zahtev → provera pravila → refund preko dobavljača → refund preko payment gateway-a → knjiženje storna</li>
+        <li><strong>EMD (Electronic Miscellaneous Document)</strong> praćenje za ancillary naplate koje se refundiraju odvojeno od tiketa</li>
+        <li><strong>IRROPS (Irregular Operations)</strong> — automatska detekcija otkazanog/pomerenog leta (webhook/polling ka dobavljaču), proaktivno obaveštavanje putnika i predlog rebookinga pre nego što putnik i sazna da ima problem</li>
+        <li><strong>ADM/ACM</strong> (Agent Debit/Credit Memo) — praćenje spornih zaduženja od strane avio-kompanija prema agenciji, sa workflow-om za osporavanje</li>
+      </ul>
+    </section>
+
+    <section id="finance">
+      <p class="section-kicker">08 — Najvažniji diferencijator</p>
+      <h2>Finansije &amp; računovodstvo</h2>
+      <p class="lede">Ovo je sloj koji razdvaja "aplikaciju za pretragu letova" od agencije koja stvarno može da posluje po IATA standardima. Bez njega, ni najbolji search UX nema kome da naplati i izveštava.</p>
+
+      <h3>Glavna knjiga (General Ledger)</h3>
+      <p>Svaka transakcija se knjiži dvostrukim knjigovodstvom (double-entry) u trenutku kad nastane, ne tek na kraju perioda: <code>potraživanje od kupca</code> / <code>prihod</code> / <code>obaveza prema avio-kompaniji (net fare)</code> / <code>prihod od komisije ili markup-a</code> / <code>trošak obrade plaćanja</code>. Ledger servis je append-only (nikad se ne prepisuje red), korekcije idu kao novi kompenzacioni zapisi — standardna praksa za audit trag.</p>
+
+      <h3>BSP / ARC obračun</h3>
+      <p>Za GDS-izdate tikete, novac ne ide direktno avio-kompaniji nego kroz <strong>IATA BSP</strong> (Billing and Settlement Plan, van SAD) ili <strong>ARC</strong> (Airlines Reporting Corporation, u SAD) na nedeljnom/dvonedeljnom ciklusu. Sistem mora da:</p>
+      <ul>
+        <li>Generiše i prati BSP/ARC izveštajni period (sales report) po IATA broju agencije</li>
+        <li>Rezerviše likvidnost (treasury) za remitanciju — novac od kupca se naplati odmah, ali plaćanje avio-kompaniji ide tek na sledeći settlement datum, pa je potreban cash flow buffer</li>
+        <li>Automatski rekoncilira BSP/ARC izveštaj protiv internog ledgera (razlike = ADM/ACM kandidati)</li>
+      </ul>
+
+      <h3>Multi-currency &amp; FX</h3>
+      <p>Tri nivoa valute po transakciji: <code>booking currency</code> (šta korisnik vidi), <code>settlement currency</code> (u čemu se plaća dobavljaču/BSP-u), <code>reporting currency</code> (bazna valuta firme za finansijske izveštaje). FX kurs se "zaključava" u trenutku rezervacije da bi se izbegao rizik promene kursa do trenutka fakturisanja.</p>
+
+      <h3>Porez i fiskalizacija</h3>
+      <ul>
+        <li>Avio karta = fare + carrier-imposed surcharge (YQ/YR) + državne takse (aerodromske, sigurnosne) — svaka komponenta se posebno prikazuje jer imaju različit poreski tretman</li>
+        <li>Međunarodni prevoz putnika je u većini jurisdikcija oslobođen PDV-a (zero-rated), dok je agencijska provizija/service fee oporeziva — <strong>tax engine</strong> mora razlikovati te dve linije</li>
+        <li>Lokalna fiskalizacija (fiskalni računi) po tržištu na kojem poslujemo — pluggable tax provider (npr. Avalara/Vertex ili lokalni fiskalni sistem)</li>
+      </ul>
+
+      <h3>Revenue recognition</h3>
+      <p>Po IFRS 15 / ASC 606, prihod od prodaje tiketa se <strong>odlaže</strong> (deferred revenue) do datuma putovanja, ne knjiži se u trenutku prodaje — jer do tada agencija ima obavezu da isporuči uslugu. Neiskorišćeni, nerefundirani tiketi nakon isteka roka postaju "breakage" prihod. Ovo je razlika koju mnogi mali booking startapi uopšte ne rade ispravno.</p>
+
+      <h3>Fakturisanje</h3>
+      <div class="grid-2">
+        <div class="card">
+          <h4>B2C</h4>
+          <p>Automatski elektronski račun/potvrda odmah po kupovini, sa raščlanjenim fare/tax/service fee stavkama.</p>
+        </div>
+        <div class="card">
+          <h4>B2B / korporativni</h4>
+          <p>Konsolidovana mesečna faktura po klijentu, cost-center kodovi, integracija sa korporativnim travel policy engine-om.</p>
+        </div>
+      </div>
+
+      <h3>Fraud &amp; chargeback</h3>
+      <p>Real-time fraud scoring pre autorizacije plaćanja (device fingerprint, brzina kupovine, geo mismatch), rezervni fond (rolling reserve) kod payment procesora za chargeback rizik, i workflow za osporavanje chargebackova sa dokazima o isporuci usluge (boarding pass, tiket broj).</p>
+
+      <h3>Integracija sa ERP/računovodstvenim sistemom</h3>
+      <p>Ledger servis izvozi dnevne/nedeljne zapise u eksterni ERP (NetSuite, SAP, Xero, QuickBooks) preko API-ja, sa unapred definisanim kontnim planom (chart of accounts) usklađenim sa BSP/ARC izveštajnim ciklusom.</p>
+    </section>
+
+    <section id="data">
+      <p class="section-kicker">09 — Infrastruktura</p>
+      <h2>Data platforma</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Tehnologija</th><th>Namena</th></tr></thead>
+          <tbody>
+            <tr><td>OLTP baza</td><td>PostgreSQL (multi-region)</td><td>Rezervacije, korisnici, ledger — izvor istine</td></tr>
+            <tr><td>Fare cache</td><td>Redis</td><td>Keš rezultata pretrage, price lock tokeni</td></tr>
+            <tr><td>Search index</td><td>OpenSearch/Elasticsearch</td><td>Brza pretraga i filtriranje ponuda</td></tr>
+            <tr><td>Event bus</td><td>Kafka</td><td>Asinhroni domenski događaji (order.created, ticket.issued, payment.refunded)</td></tr>
+            <tr><td>Data warehouse</td><td>Snowflake / BigQuery</td><td>BI, finansijsko izveštavanje, predictive pricing modeli</td></tr>
+            <tr><td>Object storage</td><td>S3-kompatibilan</td><td>PDF tiketi, fakture, audit snapshot-ovi sirovih odgovora dobavljača</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Svaki domenski servis ima svoju bazu (database-per-service); ledger i BSP podaci se nikad ne dele direktno preko baze — samo preko definisanih event-ova ili API poziva, da bi finansijski sloj ostao auditable i nezavisan.</p>
+    </section>
+
+    <section id="security">
+      <p class="section-kicker">10 — Cross-cutting</p>
+      <h2>Bezbednost &amp; compliance</h2>
+      <ul>
+        <li><strong>PCI DSS</strong> — tokenizacija kartica, minimalan scope (SAQ A gde je moguće) kroz hosted payment fields</li>
+        <li><strong>GDPR / lokalni zakoni o privatnosti</strong> — putnički podaci (API/PNR data) su posebno osetljivi, pravo na brisanje mora poštovati zakonski rok čuvanja fiskalnih dokumenata</li>
+        <li><strong>IATA akreditacija</strong> — BSP/ARC/IATAN status, finansijske garancije, godišnji audit</li>
+        <li><strong>SOC 2 Type II</strong> — pogotovo bitno ako nudimo white-label/partner API drugim agencijama</li>
+        <li><strong>Observability</strong> — distribuirani tracing (OpenTelemetry) kroz ceo saga flow rezervacije, jer greška može nastati kod bilo kog od 5 spoljnih sistema u lancu</li>
+        <li><strong>DR/BCP</strong> — multi-region failover; posebno kritično jer ljudi kupuju tikete za let za 2 sata — downtime ima direktnu cenu</li>
+      </ul>
+    </section>
+
+    <section id="diferencijacija">
+      <p class="section-kicker">11 — Predlog proizvoda</p>
+      <h2>Šta nas čini boljima od postojećih</h2>
+      <p class="lede">Pored onoga što Amadeus/Sabre/Travelport/Travelfusion/Duffel već rade, predlažem sledeće da bi platforma bila kompletna za uspešno poslovanje, ne samo tehnički funkcionalna.</p>
+      <div class="grid-2">
+        <div class="card"><h4>Multi-izvor agregacija</h4><p>Kombinovanje GDS + NDC + LCC u jednoj listi rezultata — retko ko to radi dobro na jednom mestu.</p></div>
+        <div class="card"><h4>Predictive pricing</h4><p>ML predlog "kupi sad / sačekaj" na osnovu istorijskih cena po ruti.</p></div>
+        <div class="card"><h4>Proaktivni IRROPS</h4><p>Obaveštavamo putnika o problemu s letom pre nego što on to primeti, sa gotovim predlogom rebookinga.</p></div>
+        <div class="card"><h4>Loyalty &amp; wallet</h4><p>Sopstveni loyalty program i store credit wallet za brže refunde umesto čekanja na banku.</p></div>
+        <div class="card"><h4>Corporate travel &amp; duty of care</h4><p>Travel policy engine, real-time lokacija putnika u krizi, cost-center izveštavanje.</p></div>
+        <div class="card"><h4>Transparentno knjigovodstvo</h4><p>BSP-grade finansijski sloj od prvog dana, ne naknadna "zakrpa" kad narastemo.</p></div>
+        <div class="card"><h4>White-label / B2B2C API</h4><p>Isti search+booking+finance stek se iznajmljuje drugim agencijama kao dodatni prihod.</p></div>
+        <div class="card"><h4>Self-service manage-booking</h4><p>Korisnik sam menja sedište/datum/refund bez čekanja na podršku, gde god fare pravila to dozvoljavaju.</p></div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <p class="section-kicker">12 — Preporuka</p>
+      <h2>Tehnološki stek</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Preporuka</th><th>Obrazloženje</th></tr></thead>
+          <tbody>
+            <tr><td>Backend servisi</td><td>TypeScript/Node ili Go (mikroservisi)</td><td>Go za servise osetljive na latenciju (search fan-out), TS za domenske servise gde je brzina razvoja bitnija</td></tr>
+            <tr><td>Frontend</td><td>Next.js / React</td><td>SSR za SEO na landing/search stranicama, brz TTFB</td></tr>
+            <tr><td>Mobilne app</td><td>React Native ili nativno (Swift/Kotlin) za checkout flow</td><td>Deljen kod za browsing, nativno za plaćanje radi najboljeg UX-a i biometrije</td></tr>
+            <tr><td>Message bus</td><td>Kafka</td><td>Event sourcing za order/ledger tok, replay mogućnost za audit</td></tr>
+            <tr><td>Baza</td><td>PostgreSQL + Redis</td><td>ACID za ledger, brz keš za fare rezultate</td></tr>
+            <tr><td>Payments</td><td>Stripe/Adyen + BSP/ARC integracija</td><td>Tokenizacija i 3DS out-of-the-box, smanjuje PCI scope</td></tr>
+            <tr><td>Infrastruktura</td><td>Kubernetes, multi-region</td><td>Nezavisno skaliranje search servisa (burst saobraćaj) i booking servisa (konzistentnost)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <p class="section-kicker">13 — Plan realizacije</p>
+      <h2>Fazna realizacija</h2>
+      <div class="phase">
+        <div class="phase-tag">FAZA 1</div>
+        <div class="phase-body">
+          <h4>MVP — jedan agregator, puna finansijska osnova</h4>
+          <p>Integracija sa Duffel-om (najbrži start, NDC + LCC, bez sopstvene IATA akreditacije) i osnovni ledger/invoicing/tax sloj od prvog dana — ne kao naknadna dogradnja.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag">FAZA 2</div>
+        <div class="phase-body">
+          <h4>Proširenje izvora</h4>
+          <p>Dodavanje Travelfusion-a za dublju LCC pokrivenost i jednog GDS-a (Amadeus ili Sabre) za full-service dubinu; izgradnja supplier abstraction layer-a kao pravog multi-provider sistema.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag">FAZA 3</div>
+        <div class="phase-body">
+          <h4>IATA akreditacija &amp; BSP</h4>
+          <p>Sopstvena BSP/ARC akreditacija kad obim opravda trošak, čime dobijamo direktan pristup avio-kompanijama bez zavisnosti od Duffel/GDS marže.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag">FAZA 4</div>
+        <div class="phase-body">
+          <h4>Diferencijacija</h4>
+          <p>Predictive pricing, loyalty program, corporate travel modul, white-label API za druge agencije.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="doc-footer">
+      Terminal Flights — interni arhitektonski dokument. Pripremljeno na osnovu javno dostupne dokumentacije Amadeus for Developers, Sabre Dev Studio, Travelport uAPI/Travelport+, Travelfusion i Duffel API, IATA BSP/ARC standarda i opšte prakse OTA/GDS industrije.
+    </footer>
+
+  </main>
+</div>
