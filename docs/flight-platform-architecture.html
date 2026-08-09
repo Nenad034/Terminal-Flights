@@ -358,8 +358,9 @@ html{scroll-behavior:smooth;}
       <li><a href="#analytics"><span class="num">17</span>Analytics &amp; eksperimentisanje</a></li>
       <li><a href="#localization"><span class="num">18</span>Lokalizacija &amp; pravni entiteti</a></li>
       <li><a href="#stack"><span class="num">19</span>Alati &amp; tehnologije</a></li>
-      <li><a href="#horizon"><span class="num">20</span>Horizont: naredni 5 godina</a></li>
-      <li><a href="#roadmap"><span class="num">21</span>Fazna realizacija</a></li>
+      <li><a href="#offline"><span class="num">20</span>Mobilni offline mod</a></li>
+      <li><a href="#horizon"><span class="num">21</span>Horizont: naredni 5 godina</a></li>
+      <li><a href="#roadmap"><span class="num">22</span>Fazna realizacija</a></li>
     </ol>
   </nav>
 
@@ -1049,8 +1050,52 @@ html{scroll-behavior:smooth;}
       </div>
     </section>
 
+    <section id="offline">
+      <p class="section-kicker">20 — Mobilna arhitektura</p>
+      <h2>Mobilni offline mod</h2>
+      <p class="lede">Putnik najviše zavisi od aplikacije baš u trenucima kad je veza najgora — na aerodromu bez wifi-ja, u avionu pre poletanja, u romingu koji korisnik svesno gasi. Offline mod nije kozmetička funkcija nego direktan nastavak poglavlja 08 (Post-sale &amp; IRROPS) i poglavlja 12 (diferencijacija): obaveštenje o promeni leta ne vredi ništa ako korisnik ne može da otvori kartu za ukrcavanje kad mu zatreba.</p>
+
+      <h3>Šta mora raditi bez mreže</h3>
+      <div class="grid-2">
+        <div class="card"><h4>Pregled rezervacija</h4><p>Lista potvrđenih putovanja i detalji itinerera (letovi, vreme, gejt ako je poznat) čitaju se iz lokalnog keša, ne sa mreže.</p></div>
+        <div class="card"><h4>Karta za ukrcavanje</h4><p>E-tiket i boarding pass (PDF + barkod/QR) moraju biti dostupni offline; dodatno se generiše Apple Wallet/Google Wallet pass kao redundantan kanal potpuno nezavisan od naše aplikacije.</p></div>
+        <div class="card"><h4>Poslednji poznat status</h4><p>Status leta i eventualni IRROPS prikazuju se sa jasnom oznakom "ažurirano pre X min" — nikad kao da je podatak uživo kad nije.</p></div>
+        <div class="card"><h4>Kontakt &amp; hitne informacije</h4><p>Brojevi podrške, broj rezervacije, osnovni podaci putnika — dostupno bez mreže jer su upravo to podaci koji trebaju na šalteru kad nešto pođe po zlu.</p></div>
+      </div>
+
+      <h3>Šta namerno ne radi offline</h3>
+      <p>Pretraga, rezervacija, plaćanje i izmene/otkazivanja zahtevaju live revalidaciju cene i dostupnosti kod dobavljača (poglavlje 04/05) — offline mod ih ne simulira lokalno, nego ih jasno onemogućava uz poruku da se vrate kad se poveže mreža. Prikazivanje zastarele cene kao da je važeća bi bilo gore od nedostupne funkcije.</p>
+
+      <h3>Offline-first arhitektura sinhronizacije</h3>
+      <div class="flow">
+        <div class="flow-step"><div class="k">server</div><div class="t">lightweight "trip summary" read endpoint, odvojen od punog Order API-ja</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">sync</div><div class="t">periodični pull + push-triggered sync pri promeni statusa</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">lokalna baza</div><div class="t">SQLite na uređaju (WatermelonDB / op-sqlite), enkriptovana</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">UI</div><div class="t">čita isključivo iz lokalne baze, mreža je samo izvor sinhronizacije</div></div>
+      </div>
+      <p>Mobilni klijent je <strong>read-mostly</strong> za putne podatke — ne pravi lokalne izmene rezervacija, pa nema write-conflict scenarija za rešavanje. Jedini lokalni zapisi su UI preference (sačuvani filteri, draft pretrage), koji se ne sinhronizuju nazad kao transakcioni podaci.</p>
+
+      <h3>Push kao okidač, ne kao jedini kanal</h3>
+      <ul>
+        <li><strong>Silent push</strong> (APNs background / FCM data message) budi aplikaciju u pozadini čim IRROPS servis (poglavlje 08) detektuje promenu, i povlači svež snapshot pre nego što korisnik uopšte otvori app</li>
+        <li><strong>Background fetch/periodic sync</strong> na nivou OS-a kao fallback kad push ne stigne (loš signal, agresivno gašenje pozadinskih procesa na pojedinim Android uređajima)</li>
+        <li><strong>Wallet pass update</strong> — kad je moguće, gejt/vreme promena se gura i u već izdati Apple/Google Wallet pass, jer taj kanal preživljava i deinstalaciju/logout iz aplikacije</li>
+      </ul>
+
+      <h3>Prvo pokretanje bez mreže</h3>
+      <p>Nova instalacija na aerodromu bez interneta ne sme da prikaže praznu aplikaciju bez objašnjenja. Login token i poslednji sinhronizovani snapshot se čuvaju odmah nakon uspešne prijave; ako lokalni keš ne postoji uopšte (prva ikad sinhronizacija nije obavljena), UI eksplicitno komunicira "potrebna je veza za prvi ulazak" umesto tihog praznog ekrana.</p>
+
+      <div class="callout amber">
+        <span class="callout-label">Bezbednost lokalnog keša</span>
+        <p>Boarding pass, putni podaci i broj rezervacije su lični podaci (PII) koji sad žive i na uređaju, ne samo na serveru. Lokalna baza se enkriptuje ključem vezanim za iOS Keychain / Android Keystore, a keš itinerera se automatski briše nekoliko dana nakon datuma putovanja — ne čuva se neograničeno "za svaki slučaj".</p>
+      </div>
+    </section>
+
     <section id="horizon">
-      <p class="section-kicker">20 — Pogled unapred</p>
+      <p class="section-kicker">21 — Pogled unapred</p>
       <h2>Horizont: naredni 5 godina</h2>
       <p class="lede">Arhitektura iz ovog dokumenta nije neutralna prema vremenu — svaki izbor ili olakšava ili otežava sledeće promene u distribuciji, plaćanjima, identitetu i regulativi. Tabela ispod imenuje šta dolazi i gde je arhitektura već pripremljena za to, a gde treba dodatna odluka sada da bi tranzicija kasnije bila jeftina.</p>
 
@@ -1109,7 +1154,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="roadmap">
-      <p class="section-kicker">21 — Plan realizacije</p>
+      <p class="section-kicker">22 — Plan realizacije</p>
       <h2>Fazna realizacija</h2>
       <div class="phase">
         <div class="phase-tag">FAZA 1</div>
