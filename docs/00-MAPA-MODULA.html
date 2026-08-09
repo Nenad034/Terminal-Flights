@@ -1,0 +1,591 @@
+<title>Terminal Flights — Mapa modula</title>
+<style>
+:root{
+  --ink:#12161d; --ink-2:#1b212b;
+  --page:#e4e7ee;
+  --paper:#eef0f4; --paper-2:#ffffff; --surface:#ffffff;
+  --text:#1b212b; --text-dim:#5b6472;
+  --accent:#b8690f; --accent-soft:#f2dfc4;
+  --rule:#d3d8e0;
+  --success:#2f8f5b; --success-bg:#e3f3ea;
+  --warn:#a35b12; --warn-bg:#f7e7d2;
+  --info:#2563a8; --info-bg:#dce8f5;
+  --gray:#6b7280; --gray-bg:#e7e9ed;
+  --shadow: 0 1px 2px rgba(20,24,31,.06), 0 10px 28px rgba(20,24,31,.07);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  --sans: "Avenir Next", "Century Gothic", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --header-h: 64px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#07090c;
+    --paper:#12161d; --paper-2:#161b23; --surface:#1b212b;
+    --text:#e7e9ed; --text-dim:#98a2b3;
+    --accent:#e7a339; --accent-soft:#3a2c14;
+    --rule:#2b3242;
+    --success:#5cd39a; --success-bg:#173023;
+    --warn:#e7a339; --warn-bg:#332411;
+    --info:#7ab6ec; --info-bg:#122a3d;
+    --gray:#8b95a5; --gray-bg:#232a37;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#07090c;
+  --paper:#12161d; --paper-2:#161b23; --surface:#1b212b;
+  --text:#e7e9ed; --text-dim:#98a2b3;
+  --accent:#e7a339; --accent-soft:#3a2c14;
+  --rule:#2b3242;
+  --success:#5cd39a; --success-bg:#173023;
+  --warn:#e7a339; --warn-bg:#332411;
+  --info:#7ab6ec; --info-bg:#122a3d;
+  --gray:#8b95a5; --gray-bg:#232a37;
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+:root[data-theme="light"]{
+  --page:#e4e7ee;
+  --paper:#eef0f4; --paper-2:#ffffff; --surface:#ffffff;
+  --text:#1b212b; --text-dim:#5b6472;
+  --accent:#b8690f; --accent-soft:#f2dfc4;
+  --rule:#d3d8e0;
+  --success:#2f8f5b; --success-bg:#e3f3ea;
+  --warn:#a35b12; --warn-bg:#f7e7d2;
+  --info:#2563a8; --info-bg:#dce8f5;
+  --gray:#6b7280; --gray-bg:#e7e9ed;
+  --shadow: 0 1px 2px rgba(20,24,31,.06), 0 10px 28px rgba(20,24,31,.07);
+  color-scheme: light;
+}
+*{box-sizing:border-box;}
+html, body{ height:100%; }
+body{
+  margin:0; background:var(--page); color:var(--text);
+  font-family:var(--sans); font-size:15px; line-height:1.5;
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+}
+a{color:var(--accent);}
+
+.tf-frame{
+  width:90vw; height:90vh; position:relative; overflow:hidden;
+  display:flex; flex-direction:column;
+  background:var(--paper); border:1px solid var(--rule); border-radius:16px; box-shadow:var(--shadow);
+}
+
+.board{
+  flex:none; height:var(--header-h); z-index:40;
+  background:linear-gradient(180deg,#171c25,#12161d); color:#eef0f4;
+  display:flex; align-items:center; gap:14px; padding:0 18px;
+  border-bottom:1px solid #05070a; box-shadow:0 2px 0 rgba(0,0,0,.25);
+}
+.board .brand{
+  font-family:var(--mono); font-weight:700; letter-spacing:.14em; font-size:16px;
+  color:#f4f6f9; text-transform:uppercase; display:flex; align-items:baseline; gap:8px; white-space:nowrap;
+}
+.board .brand small{ font-family:var(--sans); font-weight:400; letter-spacing:0; text-transform:none; font-size:12px; color:#9aa6b8; }
+.board .actions{ margin-left:auto; display:flex; gap:10px; align-items:center; }
+.board a.back{ color:#c7ceda; font-size:12.5px; text-decoration:none; border:1px solid #333c4a; padding:6px 10px; border-radius:6px; white-space:nowrap; }
+.board a.back:hover{ background:#1f2530; }
+.wf-btn{
+  font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:.03em;
+  background:#1f2530; color:#e7a339; border:1px solid #3a4356; border-radius:6px;
+  padding:8px 14px; cursor:pointer;
+}
+.wf-btn.active{ background:#e7a339; color:#171c25; border-color:#e7a339; }
+
+main{
+  flex:1; min-height:0; display:flex; flex-direction:column;
+  padding-top:16px; padding-bottom:14px;
+}
+.wrap{
+  width:100%; margin:0 auto; padding:0 clamp(14px,2vw,32px);
+  flex:1; min-height:0; display:flex; flex-direction:column;
+}
+.intro, .legend, #wfCaption{ flex:none; }
+
+.intro{
+  background:var(--surface); border:1px solid var(--rule); border-radius:10px;
+  padding:14px 18px; margin-bottom:16px; box-shadow:var(--shadow); font-size:13.5px; color:var(--text-dim);
+}
+.intro b{ color:var(--text); }
+#wfCaption{
+  display:none; background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px;
+  padding:12px 18px; margin-bottom:16px; font-size:13.5px; color:var(--text);
+}
+#wfCaption.show{ display:block; }
+
+.legend{
+  display:flex; flex-wrap:wrap; gap:16px; align-items:center;
+  background:var(--surface); border:1px solid var(--rule); border-radius:10px;
+  padding:10px 16px; margin-bottom:16px; box-shadow:var(--shadow); font-size:12px; color:var(--text-dim);
+}
+.legend .item{ display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.legend svg{ display:block; }
+.dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+.graph-outer{ position:relative; flex:1; min-height:0; overflow:auto; display:flex; }
+.graph{
+  position:relative; display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); grid-template-rows:auto 1fr;
+  gap:clamp(18px,2.6vw,38px) clamp(12px,1.6vw,26px); align-items:start;
+  padding:6px clamp(40px,6vw,90px) 16px; width:100%; min-width:1080px; margin:auto 0;
+}
+.col-head{
+  font-family:var(--mono); font-size:clamp(11px,.85vw,13.5px); letter-spacing:.08em; text-transform:uppercase;
+  color:var(--text-dim); text-align:center; padding-bottom:6px; border-bottom:1px dashed var(--rule);
+  grid-row:1;
+}
+.col{ display:flex; flex-direction:column; gap:clamp(18px,2.2vw,34px); grid-row:2; align-items:stretch; justify-content:center; padding-top:8px; }
+
+svg.edges{ position:absolute; top:0; left:0; pointer-events:none; z-index:1; }
+svg.edges path{ opacity:.16; transition:opacity .15s ease; }
+svg.edges path.hi{ opacity:1 !important; stroke-width:2.6; }
+
+.node{
+  position:relative; z-index:2; background:var(--surface); border:1.5px solid var(--rule);
+  border-radius:10px; padding:clamp(10px,1.1vw,16px) clamp(12px,1.2vw,18px); box-shadow:var(--shadow); cursor:pointer;
+  transition:opacity .18s ease, transform .12s ease, border-color .12s ease;
+}
+.node:hover{ transform:translateY(-2px); border-color:var(--accent); }
+.node .top{ display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.node .code{ font-family:var(--mono); font-weight:800; font-size:clamp(12px,1vw,15px); color:var(--accent); }
+.node .cel-dot{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+.node .umb, .detail-panel .umb{
+  font-family:var(--mono); font-size:clamp(8.5px,.68vw,10.5px); font-weight:700; letter-spacing:.02em;
+  background:var(--gray-bg); color:var(--gray); padding:1px 5px; border-radius:3px;
+}
+.detail-panel .umb{ font-size:10px; padding:2px 6px; }
+.node .title{ font-size:clamp(12.5px,1vw,15px); font-weight:600; line-height:1.3; }
+.node .status{ margin-top:6px; display:flex; align-items:center; gap:5px; font-size:clamp(10px,.72vw,11.5px); color:var(--text-dim); }
+.node .status .dot{ width:7px; height:7px; }
+.node .open-link{
+  position:absolute; top:8px; right:9px; font-size:12px; line-height:1; color:var(--text-dim);
+  text-decoration:none; opacity:.45; padding:2px;
+}
+.node .open-link:hover{ opacity:1; color:var(--accent); }
+
+.graph.dim-mode .node{ opacity:.2; }
+.graph.dim-mode .node.hi{ opacity:1; }
+.graph.dim-mode .node.neighbor{
+  border-color:var(--accent); box-shadow:var(--shadow), 0 0 0 2px var(--accent-soft);
+}
+.graph.dim-mode .node.focused{
+  opacity:1; transform:scale(1.6); z-index:8; border-color:var(--accent); border-width:2px;
+  box-shadow:0 14px 36px rgba(0,0,0,.35), 0 0 0 5px var(--accent-soft);
+}
+.graph.dim-mode .node.focused .title{ font-size:14px; }
+.graph.dim-mode path.hi{ opacity:1 !important; stroke-width:2.4; }
+.graph.dim-mode path{ opacity:.06; }
+
+/* ---- detail popup panel (contained within the 90% frame) ---- */
+.detail-panel{
+  position:absolute; top:16px; right:-380px; bottom:16px; width:330px;
+  background:var(--surface); border:1px solid var(--rule); border-radius:12px;
+  box-shadow:0 18px 44px rgba(0,0,0,.3); z-index:50;
+  transition:right .22s ease; display:flex; flex-direction:column; overflow:hidden;
+}
+.detail-panel.open{ right:16px; }
+.detail-panel .dp-head{
+  padding:16px 18px 12px; border-bottom:1px dashed var(--rule); flex:none;
+}
+.detail-panel .dp-close{
+  position:absolute; top:10px; right:12px; background:none; border:none; cursor:pointer;
+  font-size:18px; color:var(--text-dim); line-height:1;
+}
+.detail-panel .dp-close:hover{ color:var(--accent); }
+.detail-panel .dp-top{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.detail-panel .dp-code{ font-family:var(--mono); font-weight:800; font-size:16px; color:var(--accent); }
+.detail-panel .dp-title{ font-size:16.5px; font-weight:700; }
+.detail-panel .dp-badges{ display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+.detail-panel .dp-body{ padding:14px 18px 18px; overflow-y:auto; flex:1; font-size:13.5px; color:var(--text); }
+.detail-panel .dp-section{ margin-bottom:16px; }
+.detail-panel .dp-section h4{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--text-dim); margin:0 0 7px;
+}
+.detail-panel .dp-desc{ line-height:1.5; color:var(--text); }
+.detail-panel .dp-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.detail-panel .chip{
+  font-family:var(--mono); font-size:11.5px; background:var(--paper); border:1px solid var(--rule);
+  padding:3px 9px; border-radius:5px; color:var(--text);
+}
+.detail-panel .chip.linkable{ cursor:pointer; }
+.detail-panel .chip.linkable:hover{ border-color:var(--accent); color:var(--accent); }
+.detail-panel .dp-entities li{ margin:3px 0; font-family:var(--mono); font-size:12.5px; }
+.detail-panel .dp-open{
+  display:inline-block; margin-top:4px; font-size:12.5px; text-decoration:none; color:var(--accent); font-weight:600;
+}
+@media (max-width:900px){ .detail-panel{ width:calc(100% - 32px); } }
+
+@media (prefers-reduced-motion: reduce){ .node{ transition:none; } .detail-panel{ transition:none; } }
+</style>
+
+<div class="tf-frame">
+  <div class="board">
+    <div class="brand">Terminal Flights <small>Mapa modula</small></div>
+    <div class="actions">
+      <button class="wf-btn" id="wfBtn">Prikaži tok kupovine karte</button>
+      <a class="back" href="https://claude.ai/code/artifact/5a986131-4564-4683-8c6d-119556fceebb" target="_blank" rel="noopener">Terminal Travel — šira platforma ↗</a>
+      <a class="back" href="https://claude.ai/code/artifact/a4575325-5726-492d-979b-bdafa5f1cf51" target="_blank" rel="noopener">← Puna dokumentacija</a>
+    </div>
+  </div>
+
+  <main>
+    <div class="wrap">
+      <div class="intro">
+        Svaka kartica je jedan funkcionalni modul iz <b>docs/flight-platform-architecture.html</b>, raspoređen po fazi izgradnje iz poglavlja 22 (levo → desno). Bojena tačka i leva ivica kartice pokazuju kojoj od 5 celina modul pripada (legenda ispod). <b>Klik na modul</b> ga uveća i istakne sve module sa kojima je direktno povezan (ostalo potamni); klik ponovo ili na prazan prostor vraća prikaz. Strelica (↗) u uglu kartice otvara odgovarajuće poglavlje pune arhitekture u novom tabu. Puna linija = direktan poziv (API zavisnost); isprekidana linija = Event Bus (asinhroni događaj, bez direktnog poziva). Moduli sa oznakom <span class="umb">SVI</span> (Data Platform, Security &amp; Compliance) su deljena infrastruktura koju svi ostali moduli koriste — pojedinačne linije ka svima nisu iscrtane radi preglednosti. Flights je danas samostalan modul; Trip Composition (§06) ostavlja mesto za budući spoj sa modulima za smeštaj i transfer u široj Terminal Travel platformi.
+      </div>
+      <div id="wfCaption">
+        <b>Tok jedne kupovine karte kroz sistem:</b> Supplier Abstraction Layer (§03) normalizuje ponude iz GDS/NDC/LCC izvora → Search &amp; Shopping (§04) rangira rezultate i zaključava cenu → Booking &amp; Order (§05) pokreće saga rezervaciju → Payments &amp; Ticketing (§07) naplaćuje i izdaje tiket → Finance &amp; Ledger (§09) knjiži transakciju i BSP/ARC obavezu → Post-sale &amp; IRROPS (§08) preuzima svaku izmenu, refund ili poremećaj posle kupovine.
+      </div>
+      <div class="legend">
+        <div class="item"><svg width="30" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="currentColor" stroke-width="2"/></svg> API zavisnost</div>
+        <div class="item"><svg width="30" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="currentColor" stroke-width="2" stroke-dasharray="4,3"/></svg> Event Bus</div>
+        <div class="item"><span class="umb">SVI</span> Deljena infrastruktura, koriste je svi moduli</div>
+        <div class="item"><span class="dot" style="background:var(--info)"></span> Status: Specificirano <span style="opacity:.6">(arhitektura definisana, implementacija još nije počela)</span></div>
+      </div>
+      <div class="legend" id="celLegend"></div>
+      <div class="graph-outer">
+        <div class="graph" id="graph"></div>
+      </div>
+    </div>
+  </main>
+
+  <div class="detail-panel" id="detailPanel">
+    <div class="dp-head">
+      <button class="dp-close" id="dpClose" aria-label="Zatvori">×</button>
+      <div class="dp-top"><span class="dp-code" id="dpCode"></span><span class="dp-title" id="dpTitle"></span></div>
+      <div class="dp-badges" id="dpBadges"></div>
+    </div>
+    <div class="dp-body">
+      <div class="dp-section">
+        <h4>Šta radi</h4>
+        <div class="dp-desc" id="dpDesc"></div>
+      </div>
+      <div class="dp-section">
+        <h4>Ključne komponente</h4>
+        <ul class="dp-entities" id="dpEntities"></ul>
+      </div>
+      <div class="dp-section">
+        <h4>Zavisi od</h4>
+        <div class="dp-chips" id="dpDeps"></div>
+      </div>
+      <div class="dp-section">
+        <h4>Koristi ga / oslanja se na njega</h4>
+        <div class="dp-chips" id="dpUsedBy"></div>
+      </div>
+      <a class="dp-open" id="dpOpen" href="#" target="_blank" rel="noopener">Otvori poglavlje u punoj arhitekturi ↗</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var DOC_BASE = "https://claude.ai/code/artifact/a4575325-5726-492d-979b-bdafa5f1cf51";
+
+var PHASES = [
+  {id:"F0", label:"Temelj"},
+  {id:"F1", label:"Faza 1 — MVP"},
+  {id:"F2", label:"Faza 2 — Proširenje"},
+  {id:"F3", label:"Faza 3 — IATA/BSP"},
+  {id:"F4", label:"Faza 4 — Diferencijacija"}
+];
+
+// Kontekstualne celine — isti princip kao u Terminal Travel mapi (bojena tačka +
+// leva ivica kartice); kolone i dalje idu po fazi izgradnje iz poglavlja 22.
+var CELINE = {
+  g1: {label:"Temelj",              color:"#64748b"},
+  g2: {label:"Prodajni tok",        color:"#2f6fed"},
+  g3: {label:"Novac i pravo",       color:"#dc4c3f"},
+  g4: {label:"Rast i merenje",      color:"#d4a017"},
+  g5: {label:"Iskustvo na putu",    color:"#14b8a6"}
+};
+
+var NODES = [
+  {id:"supplier-layer", code:"§03", title:"Supplier Abstraction Layer", phase:"F0", umb:false, cel:"g1",
+    desc:"Adapter po dobavljaču normalizuje GDS/NDC/LCC ponude u zajednički interni Offer/Order model — domenski servisi ne znaju odakle je let stigao.",
+    entities:["Amadeus adapter","Sabre adapter","Travelport adapter","Travelfusion adapter","Duffel adapter","NDC direct adapteri"]},
+  {id:"data", code:"§10", title:"Data Platform", phase:"F0", umb:true, cel:"g1",
+    desc:"Zajednička infrastruktura za sve module — OLTP, keš, event bus i data warehouse. Agregira događaje iz cele platforme, ne sadrži sopstvenu poslovnu logiku.",
+    entities:["PostgreSQL (OLTP)","Redis (keš, price-lock)","Kafka (event bus)","Snowflake/BigQuery (DW)"]},
+  {id:"security", code:"§11", title:"Security &amp; Compliance", phase:"F0", umb:true, cel:"g1",
+    desc:"PCI DSS, GDPR, IATA akreditacija i observability presecaju sve module — uslov rada za ostatak sistema, ne posebna poslovna logika.",
+    entities:["PCI DSS tokenizacija","GDPR","IATA/BSP/ARC akreditacija","OpenTelemetry tracing"]},
+  {id:"search", code:"§04", title:"Search &amp; Shopping", phase:"F1", umb:false, cel:"g2",
+    desc:"Paralelni upit ka svim adapterima, de-dup i ranking po ceni/pouzdanosti/on-time performansi, kratkotrajni price-freeze pre checkouta.",
+    entities:["Search orchestrator (fan-out)","Fare cache (TTL)","Ranking engine","Price-freeze token","Predictive pricing (ML)"]},
+  {id:"booking", code:"§05", title:"Booking &amp; Order", phase:"F1", umb:false, cel:"g2",
+    desc:"Saga orkestracija rezervacije kroz dobavljača, plaćanje i izdavanje tiketa, sa kompenzacionim koracima ako bilo koji deo lanca padne.",
+    entities:["Booking saga","Order model","Ancillary katalog","Saga kompenzacija"]},
+  {id:"payments", code:"§07", title:"Payments &amp; Ticketing", phase:"F1", umb:false, cel:"g2",
+    desc:"Tokenizacija kartice, 3DS2/SCA, virtuelne kartice za LCC bez BSP tiketa, real-time issue tiketa uz fallback queue.",
+    entities:["Payment gateway (Adyen/Stripe)","3DS2 / SCA","Virtuelne kartice (VCC)","Ticketing engine"]},
+  {id:"finance", code:"§09", title:"Finance &amp; Ledger", phase:"F1", umb:false, cel:"g3",
+    desc:"Dvostruko knjigovodstvo od trenutka transakcije, BSP/ARC obračun, multi-currency FX, odloženo priznavanje prihoda do datuma putovanja.",
+    entities:["Append-only ledger","BSP/ARC obračun","FX &amp; multi-currency","Revenue recognition (IFRS 15)","ERP export"]},
+  {id:"bundling", code:"§06", title:"Trip Composition", phase:"F2", umb:false, cel:"g2",
+    desc:"Tanak koordinacioni ugovor (deljeni trip_id, event orkestracija) koji ostavlja mesto za budući hotel/transfer modul bez remodelovanja Order-a.",
+    entities:["Deljeni trip_id","Event ugovor (requested/confirmed/failed)","Fallback adapteri (Expedia Rapid, CarTrawler)"]},
+  {id:"postsale", code:"§08", title:"Post-sale &amp; IRROPS", phase:"F2", umb:false, cel:"g2",
+    desc:"Izmene, refundi i EMD praćenje, uz proaktivnu detekciju IRROPS-a i predlog rebookinga pre nego što putnik i primeti problem.",
+    entities:["Refund workflow","EMD praćenje","IRROPS detekcija","ADM/ACM praćenje"]},
+  {id:"protection", code:"§15", title:"Zaštita putnika &amp; Bonding", phase:"F3", umb:false, cel:"g3",
+    desc:"Čim let uđe u paket sa smeštajem/transferom preko Trip Composition (§06), aktivira se obaveza insolvency bondinga i IATA finansijska garancija.",
+    entities:["EU Package Travel Directive","IATA finansijska garancija","Trust/client money račun","EU261 kompenzacija"]},
+  {id:"localization", code:"§18", title:"Lokalizacija &amp; Pravni entiteti", phase:"F3", umb:false, cel:"g3",
+    desc:"i18n, pravni entiteti po jurisdikciji, data residency i lokalna prava putnika (EU261/DOT) kao pluggable rule set, ne hardkodovana logika.",
+    entities:["i18n arhitektura","Pravni entiteti po tržištu","Data residency","Pluggable rule set (EU261/DOT)"]},
+  {id:"business-model", code:"§13", title:"Poslovni model &amp; Pricing", phase:"F4", umb:false, cel:"g4",
+    desc:"Pet tokova prihoda (markup, service fee, ancillary, affiliate, white-label) i granice dinamičkog markupa koje pricing engine ne sme sam da pomera.",
+    entities:["Markup na net fare","Service fee","Ancillary komisija","White-label API"]},
+  {id:"analytics", code:"§17", title:"Analytics &amp; Eksperimentisanje", phase:"F4", umb:false, cel:"g4",
+    desc:"Read-only projekcija istih Kafka događaja kao ledger — nikad izvor istine za novac; funnel, A/B testing i predictive pricing signali.",
+    entities:["Funnel metrike","A/B testing (feature flags)","Analytics warehouse (read-only)"]},
+  {id:"offline", code:"§20", title:"Mobilni Offline Mod", phase:"F4", umb:false, cel:"g5",
+    desc:"Read-mostly lokalni keš (SQLite) sinhronizovan preko lightweight trip-summary endpointa; push kao okidač sinhronizacije, ne jedini kanal.",
+    entities:["Lokalna SQLite baza","Trip-summary endpoint","Silent push sync","Wallet pass (Apple/Google)"]}
+];
+
+var DEPS = [
+  ["search","supplier-layer"],
+  ["booking","supplier-layer"],["booking","search"],
+  ["bundling","booking"],
+  ["payments","booking"],
+  ["postsale","booking"],["postsale","payments"],["postsale","supplier-layer"],
+  ["finance","booking"],["finance","payments"],["finance","supplier-layer"],
+  ["business-model","finance"],["business-model","search"],
+  ["protection","bundling"],["protection","finance"],
+  ["localization","finance"],["localization","protection"],
+  ["offline","booking"],["offline","postsale"]
+];
+
+var EVENTS = [
+  ["booking","analytics"],
+  ["payments","analytics"],
+  ["postsale","analytics"],
+  ["postsale","offline"]
+];
+
+var WORKFLOW = ["supplier-layer","search","booking","payments","finance","postsale"];
+
+// ---- build DOM ----
+var graph = document.getElementById("graph");
+
+var celLegend = document.getElementById("celLegend");
+Object.keys(CELINE).forEach(function(k){
+  var c = CELINE[k];
+  var item = document.createElement("div");
+  item.className = "item";
+  item.innerHTML = '<span class="dot" style="background:'+c.color+'"></span> '+c.label;
+  celLegend.appendChild(item);
+});
+
+PHASES.forEach(function(p, i){
+  var h = document.createElement("div");
+  h.className = "col-head";
+  h.style.gridColumn = (i+1);
+  h.textContent = p.label;
+  graph.appendChild(h);
+});
+
+PHASES.forEach(function(p, i){
+  var col = document.createElement("div");
+  col.className = "col";
+  col.style.gridColumn = (i+1);
+  NODES.filter(function(n){ return n.phase === p.id; }).forEach(function(n){
+    var card = document.createElement("div");
+    card.className = "node";
+    card.dataset.id = n.id;
+    var cel = CELINE[n.cel];
+    card.style.borderLeft = "4px solid " + cel.color;
+    var umbBadge = n.umb ? '<span class="umb">SVI</span>' : "";
+    var celDot = '<span class="cel-dot" style="background:'+cel.color+'" title="Celina: '+cel.label+'"></span>';
+    card.innerHTML =
+      '<a class="open-link" href="'+DOC_BASE+'#'+n.id+'" target="_blank" rel="noopener" title="Otvori poglavlje">↗</a>'+
+      '<div class="top">'+celDot+'<span class="code">'+n.code+'</span>'+umbBadge+'</div>'+
+      '<div class="title">'+n.title+'</div>'+
+      '<div class="status"><span class="dot" style="background:var(--info)"></span>Specificirano</div>';
+    card.querySelector(".open-link").addEventListener("click", function(ev){ ev.stopPropagation(); });
+    card.addEventListener("click", function(){ toggleFocus(n.id); });
+    col.appendChild(card);
+  });
+  graph.appendChild(col);
+});
+
+var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+svg.setAttribute("class", "edges");
+graph.insertBefore(svg, graph.firstChild);
+
+var defs = document.createElementNS(svg.namespaceURI, "defs");
+["arrow","arrow-hi"].forEach(function(id){
+  var marker = document.createElementNS(svg.namespaceURI, "marker");
+  marker.setAttribute("id", id);
+  marker.setAttribute("markerWidth", "8"); marker.setAttribute("markerHeight", "8");
+  marker.setAttribute("refX", "6"); marker.setAttribute("refY", "3");
+  marker.setAttribute("orient", "auto");
+  var path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", "M0,0 L6,3 L0,6 Z");
+  path.setAttribute("fill", id === "arrow-hi" ? "#e7a339" : "currentColor");
+  marker.appendChild(path);
+  defs.appendChild(marker);
+});
+svg.appendChild(defs);
+
+function nodeCenter(id){
+  var el = graph.querySelector('.node[data-id="'+id+'"]');
+  if (!el) return null;
+  var gr = graph.getBoundingClientRect();
+  var r = el.getBoundingClientRect();
+  return { x: r.left - gr.left + r.width/2, y: r.top - gr.top + r.height/2, w:r.width, h:r.height };
+}
+
+function drawEdges(){
+  svg.setAttribute("width", graph.scrollWidth);
+  svg.setAttribute("height", graph.scrollHeight);
+  svg.style.width = graph.scrollWidth + "px";
+  svg.style.height = graph.scrollHeight + "px";
+  while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+
+  function addEdge(a, b, dashed){
+    var ca = nodeCenter(a), cb = nodeCenter(b);
+    if (!ca || !cb) return;
+    var sameSide = ca.x < cb.x ? 1 : -1;
+    var x1 = ca.x + (sameSide * ca.w/2 * 0.9), y1 = ca.y;
+    var x2 = cb.x - (sameSide * cb.w/2 * 0.9), y2 = cb.y;
+    var dx = (x2 - x1) * 0.5;
+    var d = "M"+x1+","+y1+" C "+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;
+    var path = document.createElementNS(svg.namespaceURI, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", dashed ? "#8b95a5" : "#94a0b4");
+    path.setAttribute("stroke-width", "1.6");
+    if (dashed) path.setAttribute("stroke-dasharray", "5,4");
+    path.setAttribute("marker-end", "url(#arrow)");
+    path.dataset.a = a; path.dataset.b = b;
+    svg.appendChild(path);
+  }
+  DEPS.forEach(function(e){ addEdge(e[0], e[1], false); });
+  EVENTS.forEach(function(e){ addEdge(e[0], e[1], true); });
+}
+
+window.addEventListener("resize", drawEdges);
+window.addEventListener("load", drawEdges);
+setTimeout(drawEdges, 50);
+setTimeout(drawEdges, 400);
+
+function neighborsOf(id){
+  var s = {};
+  DEPS.concat(EVENTS).forEach(function(e){
+    if (e[0] === id) s[e[1]] = true;
+    if (e[1] === id) s[e[0]] = true;
+  });
+  return s;
+}
+
+function clearAll(){
+  graph.classList.remove("dim-mode");
+  graph.querySelectorAll(".node").forEach(function(n){ n.classList.remove("hi","neighbor","focused"); });
+  svg.querySelectorAll("path").forEach(function(p){ p.classList.remove("hi"); });
+  detailPanel.classList.remove("open");
+}
+
+var NODE_BY_ID = {}; NODES.forEach(function(n){ NODE_BY_ID[n.id] = n; });
+
+function dependsOn(id){ return DEPS.filter(function(e){ return e[0] === id; }).map(function(e){ return e[1]; }); }
+function usedBy(id){
+  var out = DEPS.filter(function(e){ return e[1] === id; }).map(function(e){ return e[0]; });
+  EVENTS.forEach(function(e){ if (e[0] === id && out.indexOf(e[1]) === -1) out.push(e[1]); });
+  return out;
+}
+
+var detailPanel = document.getElementById("detailPanel");
+var dpClose = document.getElementById("dpClose");
+
+function chip(id, linkable){
+  var n = NODE_BY_ID[id];
+  if (!n) return "";
+  return '<span class="chip'+(linkable?' linkable':'')+'" data-goto="'+id+'">'+n.code+' · '+n.title+'</span>';
+}
+
+function showDetail(id){
+  var n = NODE_BY_ID[id];
+  document.getElementById("dpCode").textContent = n.code;
+  document.getElementById("dpTitle").innerHTML = n.title;
+  var cel = CELINE[n.cel];
+  var celBadge = '<span class="umb" style="background:'+cel.color+'22; color:'+cel.color+'">'+cel.label+'</span>';
+  var badges = celBadge + (n.umb ? '<span class="umb">SVI</span>' : "");
+  document.getElementById("dpBadges").innerHTML = badges;
+  document.getElementById("dpDesc").textContent = n.desc || "";
+  document.getElementById("dpEntities").innerHTML = (n.entities||[]).map(function(e){ return "<li>"+e+"</li>"; }).join("");
+  var deps = dependsOn(id), used = usedBy(id);
+  document.getElementById("dpDeps").innerHTML = deps.length ? deps.map(function(d){ return chip(d, true); }).join("") : '<span class="chip">— (temelj)</span>';
+  document.getElementById("dpUsedBy").innerHTML = used.length ? used.map(function(d){ return chip(d, true); }).join("") : '<span class="chip">—</span>';
+  document.getElementById("dpOpen").href = DOC_BASE + "#" + id;
+  detailPanel.classList.add("open");
+}
+
+detailPanel.addEventListener("click", function(ev){
+  ev.stopPropagation();
+  var c = ev.target.closest(".chip.linkable");
+  if (c) toggleFocus(c.dataset.goto);
+});
+dpClose.addEventListener("click", function(){ focusedId = null; clearAll(); });
+
+// ---- click-to-focus (enlarge clicked module, clearly show its connections + detail popup) ----
+var focusedId = null;
+
+function toggleFocus(id){
+  if (wfActive) { wfActive = false; wfBtn.classList.remove("active"); wfCaption.classList.remove("show"); }
+  if (focusedId === id) { focusedId = null; clearAll(); return; }
+  focusedId = id;
+  var nb = neighborsOf(id);
+  graph.classList.add("dim-mode");
+  graph.querySelectorAll(".node").forEach(function(n){
+    var nid = n.dataset.id;
+    n.classList.toggle("focused", nid === id);
+    n.classList.toggle("neighbor", !!nb[nid] && nid !== id);
+    n.classList.toggle("hi", nid === id || !!nb[nid]);
+  });
+  svg.querySelectorAll("path").forEach(function(p){
+    p.classList.toggle("hi", (p.dataset.a === id || p.dataset.b === id));
+  });
+  var el = graph.querySelector('.node[data-id="'+id+'"]');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+  showDetail(id);
+}
+
+document.addEventListener("click", function(ev){
+  if (!focusedId) return;
+  if (ev.target.closest(".node") || ev.target.closest(".wf-btn") || ev.target.closest(".detail-panel")) return;
+  focusedId = null;
+  clearAll();
+});
+
+// ---- workflow toggle ----
+var wfBtn = document.getElementById("wfBtn");
+var wfCaption = document.getElementById("wfCaption");
+var wfActive = false;
+wfBtn.addEventListener("click", function(){
+  focusedId = null;
+  detailPanel.classList.remove("open");
+  wfActive = !wfActive;
+  wfBtn.classList.toggle("active", wfActive);
+  wfCaption.classList.toggle("show", wfActive);
+  if (wfActive){
+    var set = {}; WORKFLOW.forEach(function(id){ set[id] = true; });
+    graph.classList.add("dim-mode");
+    graph.querySelectorAll(".node").forEach(function(n){
+      n.classList.remove("focused","neighbor");
+      n.classList.toggle("hi", !!set[n.dataset.id]);
+    });
+    svg.querySelectorAll("path").forEach(function(p){
+      p.classList.toggle("hi", set[p.dataset.a] && set[p.dataset.b]);
+    });
+  } else {
+    clearAll();
+  }
+});
+})();
+</script>
