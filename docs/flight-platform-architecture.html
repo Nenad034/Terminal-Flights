@@ -344,20 +344,21 @@ html{scroll-behavior:smooth;}
       <li><a href="#supplier-layer"><span class="num">03</span>Supplier abstraction layer</a></li>
       <li><a href="#search"><span class="num">04</span>Search &amp; Shopping</a></li>
       <li><a href="#booking"><span class="num">05</span>Booking &amp; Order</a></li>
-      <li><a href="#payments"><span class="num">06</span>Plaćanja &amp; tiketing</a></li>
-      <li><a href="#postsale"><span class="num">07</span>Post-sale &amp; IRROPS</a></li>
-      <li><a href="#finance"><span class="num">08</span>Finansije &amp; računovodstvo</a></li>
-      <li><a href="#data"><span class="num">09</span>Data platforma</a></li>
-      <li><a href="#security"><span class="num">10</span>Bezbednost &amp; compliance</a></li>
-      <li><a href="#diferencijacija"><span class="num">11</span>Šta nas čini boljima</a></li>
-      <li><a href="#business-model"><span class="num">12</span>Poslovni model &amp; pricing</a></li>
-      <li><a href="#forecast"><span class="num">13</span>Projekcija prihoda</a></li>
-      <li><a href="#protection"><span class="num">14</span>Zaštita putnika &amp; bonding</a></li>
-      <li><a href="#competition"><span class="num">15</span>Konkurentska analiza</a></li>
-      <li><a href="#analytics"><span class="num">16</span>Analytics &amp; eksperimentisanje</a></li>
-      <li><a href="#localization"><span class="num">17</span>Lokalizacija &amp; pravni entiteti</a></li>
-      <li><a href="#stack"><span class="num">18</span>Tehnološki stek</a></li>
-      <li><a href="#roadmap"><span class="num">19</span>Fazna realizacija</a></li>
+      <li><a href="#bundling"><span class="num">06</span>Let + smeštaj + transfer</a></li>
+      <li><a href="#payments"><span class="num">07</span>Plaćanja &amp; tiketing</a></li>
+      <li><a href="#postsale"><span class="num">08</span>Post-sale &amp; IRROPS</a></li>
+      <li><a href="#finance"><span class="num">09</span>Finansije &amp; računovodstvo</a></li>
+      <li><a href="#data"><span class="num">10</span>Data platforma</a></li>
+      <li><a href="#security"><span class="num">11</span>Bezbednost &amp; compliance</a></li>
+      <li><a href="#diferencijacija"><span class="num">12</span>Šta nas čini boljima</a></li>
+      <li><a href="#business-model"><span class="num">13</span>Poslovni model &amp; pricing</a></li>
+      <li><a href="#forecast"><span class="num">14</span>Projekcija prihoda</a></li>
+      <li><a href="#protection"><span class="num">15</span>Zaštita putnika &amp; bonding</a></li>
+      <li><a href="#competition"><span class="num">16</span>Konkurentska analiza</a></li>
+      <li><a href="#analytics"><span class="num">17</span>Analytics &amp; eksperimentisanje</a></li>
+      <li><a href="#localization"><span class="num">18</span>Lokalizacija &amp; pravni entiteti</a></li>
+      <li><a href="#stack"><span class="num">19</span>Alati &amp; tehnologije</a></li>
+      <li><a href="#roadmap"><span class="num">20</span>Fazna realizacija</a></li>
     </ol>
   </nav>
 
@@ -472,6 +473,7 @@ html{scroll-behavior:smooth;}
           <div class="chips">
             <div class="chip accent">Search &amp; Shopping</div>
             <div class="chip accent">Order / Booking</div>
+            <div class="chip accent">Packaging <span class="fine">Trip agregat</span></div>
             <div class="chip accent">Payments &amp; Ticketing</div>
             <div class="chip accent">Post-sale &amp; IRROPS</div>
             <div class="chip accent">Ancillaries</div>
@@ -491,6 +493,8 @@ html{scroll-behavior:smooth;}
             <div class="chip">Travelfusion adapter</div>
             <div class="chip">Duffel adapter</div>
             <div class="chip">NDC direct adapters</div>
+            <div class="chip">Hotel adapters <span class="fine">Expedia, HotelBeds…</span></div>
+            <div class="chip">Transfer adapters <span class="fine">CarTrawler…</span></div>
           </div>
         </div>
         <div class="arrow-down">↓ finansijski sloj — nezavisan system of record ↓</div>
@@ -582,12 +586,56 @@ html{scroll-behavior:smooth;}
       <ul>
         <li>Izbor sedišta, prtljag, obroci, prioritetni ukrcaj — mapirani preko dobavljača na interni katalog ancillary usluga</li>
         <li>Sopstvene ancillary usluge (osiguranje putovanja, transfer do aerodroma, parking) — naša marža, ne zavisi od GDS-a</li>
-        <li>Dinamičko paketovanje (flight + hotel + rent-a-car) kroz zaseban Packaging servis</li>
+        <li>Dinamičko paketovanje (flight + hotel + rent-a-car) kroz zaseban Packaging servis — detaljno u poglavlju 06</li>
       </ul>
     </section>
 
+    <section id="bundling">
+      <p class="section-kicker">06 — Multi-proizvodna arhitektura</p>
+      <h2>Let + smeštaj + transfer</h2>
+      <p class="lede">Tržište se sve više ponaša kao jedna korpa, ne tri odvojene kupovine — Booking.com i Expedia rastu upravo na "flight + hotel + transfer" paketu jer marža na paket raste, a stopa otkazivanja pada u odnosu na pojedinačnu kupovinu. Ovo mora biti ugrađeno u arhitekturu od početka, ne dodato naknadno kao "jos jedan tab" pored pretrage letova.</p>
+
+      <h3>Prošireni supplier abstraction layer</h3>
+      <p>Isti adapter pattern iz poglavlja 03 se primenjuje na dva nova tipa dobavljača, sa istim principom — domenski servisi ne znaju odakle je soba ili transfer došao:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vertikala</th><th>Provajderi</th><th>Model integracije</th></tr></thead>
+          <tbody>
+            <tr><td>Smeštaj</td><td>Expedia Rapid API, Booking.com Partner/Demand API, HotelBeds (Hotelbeds Group), Amadeus Hotel Search/Booking, Duffel Stays</td><td>REST, net-rate + markup model isti kao kod letova; Rapid i HotelBeds imaju najširi globalni inventar sobA</td></tr>
+            <tr><td>Transferi &amp; ground transport</td><td>CarTrawler (rent-a-car + transferi), HolidayTaxis, GetTransfer, Welcome Pickups</td><td>REST; obično komisioni (agency) model bez potrebe za sopstvenom akreditacijom, slično Duffel-u kod letova</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Interni model: Trip, ne Order</h3>
+      <p>Iznad pojedinačnih <code>Order</code> objekata (let, soba, transfer — svaki sa svojim dobavljačem, svojim PNR/rezervacijskim brojem i svojim pravilima otkazivanja) uvodimo agregat <strong>Trip</strong> koji ih grupiše u jednu korisnički vidljivu rezervaciju sa jednim checkoutom i jednim plaćanjem, ali internim zapisima po komponenti:</p>
+      <div class="flow">
+        <div class="flow-step"><div class="k">1 korisnik bira</div><div class="t">let + hotel + transfer u jednom flow-u</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">2 jedan checkout</div><div class="t">jedna cena, jedno plaćanje</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">3 tri paralelne sage</div><div class="t">booking saga po komponenti (poglavlje 05)</div></div>
+        <div class="flow-sep">→</div>
+        <div class="flow-step"><div class="k">4 Trip agregat</div><div class="t">tri Order zapisa, tri stavke u ledgeru, jedna potvrda za korisnika</div></div>
+      </div>
+      <p>Ako jedna komponenta ne uspe (npr. hotel nema više raspoloživost u trenutku potvrde), ostale se ne poništavaju automatski — korisniku se nudi zamena ili refund samo te stavke, dok let i transfer ostaju važeći. Ovo je razlog zašto se saga po komponenti mora moći kompenzovati nezavisno, ne kao jedna velika transakcija za ceo Trip.</p>
+
+      <h3>Posledice po druge slojeve</h3>
+      <ul>
+        <li><strong>Ledger (poglavlje 09)</strong> — svaka komponenta Trip-a ima sopstveni net rate, maržu i, često, sopstvenu valutu i poreski tretman (smeštaj je po pravilu oporeziv PDV-om u zemlji pružanja usluge, za razliku od međunarodnog leta) — ledger mora knjižiti tri odvojena reda, ne jedan zbirni</li>
+        <li><strong>Zaštita putnika (poglavlje 15)</strong> — čim se let proda zajedno sa smeštajem ili transferom kao paket, po EU Package Travel Directive postajemo organizator putovanja i moramo obezbediti insolvency bonding (ovo je upravo razlog zašto je to poglavlje u dokumentu)</li>
+        <li><strong>Post-sale (poglavlje 08)</strong> — izmena/otkazivanje mora podržati delimično otkazivanje jedne komponente Trip-a bez diranja ostalih</li>
+        <li><strong>Ranking/pricing (poglavlje 04)</strong> — cross-sell trenutak (ponuda hotela odmah nakon izbora leta) je proizvodna odluka koja utiče na konverziju; A/B testira se kroz analytics sloj (poglavlje 17)</li>
+      </ul>
+
+      <div class="callout good">
+        <span class="callout-label">Zašto ovo pišemo u kod od početka</span>
+        <p>Ako se <code>Order</code> model projektuje samo oko leta, dodavanje hotela i transfera kasnije znači rewrite booking i ledger servisa. Projektovanjem <code>Trip</code> agregata kao kontejnera za više nezavisnih <code>Order</code> objekata od prvog dana, dodavanje nove vertikale (npr. iznajmljivanje automobila, aktivnosti) postaje pitanje novog adaptera, ne nove arhitekture.</p>
+      </div>
+    </section>
+
     <section id="payments">
-      <p class="section-kicker">06 — Domen</p>
+      <p class="section-kicker">07 — Domen</p>
       <h2>Plaćanja &amp; tiketing</h2>
       <div class="grid-2">
         <div class="card">
@@ -610,7 +658,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="postsale">
-      <p class="section-kicker">07 — Domen</p>
+      <p class="section-kicker">08 — Domen</p>
       <h2>Post-sale &amp; IRROPS</h2>
       <p class="lede">Ono što se dešava posle kupovine tiketa je gde većina low-budget booking platformi propada, a gde ozbiljna agencija gradi poverenje.</p>
       <ul>
@@ -623,7 +671,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="finance">
-      <p class="section-kicker">08 — Najvažniji diferencijator</p>
+      <p class="section-kicker">09 — Najvažniji diferencijator</p>
       <h2>Finansije &amp; računovodstvo</h2>
       <p class="lede">Ovo je sloj koji razdvaja "aplikaciju za pretragu letova" od agencije koja stvarno može da posluje po IATA standardima. Bez njega, ni najbolji search UX nema kome da naplati i izveštava.</p>
 
@@ -671,7 +719,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="data">
-      <p class="section-kicker">09 — Infrastruktura</p>
+      <p class="section-kicker">10 — Infrastruktura</p>
       <h2>Data platforma</h2>
       <div class="table-wrap">
         <table>
@@ -690,7 +738,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="security">
-      <p class="section-kicker">10 — Cross-cutting</p>
+      <p class="section-kicker">11 — Cross-cutting</p>
       <h2>Bezbednost &amp; compliance</h2>
       <ul>
         <li><strong>PCI DSS</strong> — tokenizacija kartica, minimalan scope (SAQ A gde je moguće) kroz hosted payment fields</li>
@@ -703,7 +751,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="diferencijacija">
-      <p class="section-kicker">11 — Predlog proizvoda</p>
+      <p class="section-kicker">12 — Predlog proizvoda</p>
       <h2>Šta nas čini boljima od postojećih</h2>
       <p class="lede">Pored onoga što Amadeus/Sabre/Travelport/Travelfusion/Duffel već rade, predlažem sledeće da bi platforma bila kompletna za uspešno poslovanje, ne samo tehnički funkcionalna.</p>
       <div class="grid-2">
@@ -719,7 +767,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="business-model">
-      <p class="section-kicker">12 — Prihodni model</p>
+      <p class="section-kicker">13 — Prihodni model</p>
       <h2>Poslovni model &amp; pricing</h2>
       <p class="lede">Arhitektura ne znači ništa ako ne stoji iza jasnog odgovora na pitanje odakle dolazi prihod. Kombinujemo pet tokova prihoda, svaki sa drugačijom maržom i rizikom.</p>
       <div class="table-wrap">
@@ -739,7 +787,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="forecast">
-      <p class="section-kicker">13 — Finansijski model</p>
+      <p class="section-kicker">14 — Finansijski model</p>
       <h2>Projekcija prihoda (Revenue Forecast)</h2>
       <p class="lede">Bottom-up model za prve tri godine, izveden iz pretpostavki o broju rezervacija, prosečnoj vrednosti karte (AOV) i blended take rate-u (ponderisani prosek svih tokova prihoda iz poglavlja 12).</p>
 
@@ -823,7 +871,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="protection">
-      <p class="section-kicker">14 — Regulatorna obaveza</p>
+      <p class="section-kicker">15 — Regulatorna obaveza</p>
       <h2>Zaštita putnika &amp; finansijsko obezbeđenje</h2>
       <p class="lede">Ovo je deo koji najviše startapa preskoči, a koji je zakonska prepreka za rast — posebno čim se let poveže sa hotelom ili rent-a-car uslugom u jedan paket.</p>
       <ul>
@@ -840,7 +888,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="competition">
-      <p class="section-kicker">15 — Tržišna pozicija</p>
+      <p class="section-kicker">16 — Tržišna pozicija</p>
       <h2>Konkurentska analiza</h2>
       <div class="table-wrap">
         <table>
@@ -858,7 +906,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="analytics">
-      <p class="section-kicker">16 — Merenje proizvoda</p>
+      <p class="section-kicker">17 — Merenje proizvoda</p>
       <h2>Analytics &amp; eksperimentisanje</h2>
       <p class="lede">Ranking, pricing i UX odluke iz poglavlja 04 i 12 ne smeju se donositi "na oko" — treba im merljiv funnel i eksperimentalna infrastruktura odvojena od finansijskog sistema od poverenja.</p>
       <div class="flow">
@@ -883,7 +931,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="localization">
-      <p class="section-kicker">17 — Multi-market</p>
+      <p class="section-kicker">18 — Multi-market</p>
       <h2>Lokalizacija &amp; pravni entiteti</h2>
       <ul>
         <li><strong>i18n arhitektura</strong> — prevod sadržaja, formati datuma/valute/broja po lokalu, RTL podrška ako se širimo na tržišta koja to zahtevaju; fare/tax podaci se uvek čuvaju u kanonskom obliku i tek na prikazu lokalizuju</li>
@@ -895,26 +943,112 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="stack">
-      <p class="section-kicker">18 — Preporuka</p>
-      <h2>Tehnološki stek</h2>
+      <p class="section-kicker">19 — Preporuka</p>
+      <h2>Alati &amp; tehnologije</h2>
+      <p class="lede">Konkretan izbor alata za izgradnju platforme — kriterijum je isti u svakom redu: <strong>zrelost/pouzdanost pod produkcijskim opterećenjem</strong> pre "najnovije i najsjajnije". Gde postoji realan izbor, naveden je i alternativni pravac.</p>
+
+      <h3>Jezici &amp; runtime</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Sloj</th><th>Preporuka</th><th>Obrazloženje</th></tr></thead>
+          <thead><tr><th>Sloj</th><th>Izbor</th><th>Obrazloženje</th></tr></thead>
           <tbody>
-            <tr><td>Backend servisi</td><td>TypeScript/Node ili Go (mikroservisi)</td><td>Go za servise osetljive na latenciju (search fan-out), TS za domenske servise gde je brzina razvoja bitnija</td></tr>
-            <tr><td>Frontend</td><td>Next.js / React</td><td>SSR za SEO na landing/search stranicama, brz TTFB</td></tr>
-            <tr><td>Mobilne app</td><td>React Native ili nativno (Swift/Kotlin) za checkout flow</td><td>Deljen kod za browsing, nativno za plaćanje radi najboljeg UX-a i biometrije</td></tr>
-            <tr><td>Message bus</td><td>Kafka</td><td>Event sourcing za order/ledger tok, replay mogućnost za audit</td></tr>
-            <tr><td>Baza</td><td>PostgreSQL + Redis</td><td>ACID za ledger, brz keš za fare rezultate</td></tr>
-            <tr><td>Payments</td><td>Stripe/Adyen + BSP/ARC integracija</td><td>Tokenizacija i 3DS out-of-the-box, smanjuje PCI scope</td></tr>
-            <tr><td>Infrastruktura</td><td>Kubernetes, multi-region</td><td>Nezavisno skaliranje search servisa (burst saobraćaj) i booking servisa (konzistentnost)</td></tr>
+            <tr><td>Domenski servisi</td><td>TypeScript (Node.js 22 LTS)</td><td>Najveći ekosistem za integraciju sa REST/JSON API-jima (Duffel, Amadeus, HotelBeds…), tim brzo raste, tip-sigurnost preko celog stog-a do frontenda</td></tr>
+            <tr><td>Search fan-out &amp; supplier adapteri</td><td>Go</td><td>Niska latencija i predvidljiv memory footprint pod burst saobraćajem kad se paralelno pita 5–8 dobavljača odjednom; odličan za concurrency (goroutines) tog tačno tog problema</td></tr>
+            <tr><td>Data/ML servisi</td><td>Python (FastAPI) + Polars/DuckDB</td><td>Predictive pricing, fraud scoring, ranking modeli — ekosistem (scikit-learn, PyTorch) bez alternative</td></tr>
           </tbody>
         </table>
+      </div>
+
+      <h3>Frontend &amp; mobilne aplikacije</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Izbor</th><th>Obrazloženje</th></tr></thead>
+          <tbody>
+            <tr><td>Web app</td><td>Next.js 15 (App Router) + React 19</td><td>SSR/streaming za brz TTFB na search stranicama (SEO bitan za organski saobraćaj), React Server Components smanjuju JS payload na checkoutu</td></tr>
+            <tr><td>Stilovi/komponente</td><td>Tailwind CSS + Radix UI primitives</td><td>Pristupačnost (a11y) ugrađena u primitive, brzo iteriranje bez custom CSS duga</td></tr>
+            <tr><td>State/data fetching</td><td>TanStack Query</td><td>Caching i revalidacija fare podataka na klijentu usklađena sa TTL-om fare cache-a (poglavlje 04)</td></tr>
+            <tr><td>Mobilne app</td><td>React Native (Expo) za browsing, nativni moduli (Swift/Kotlin) za checkout i biometrijsko plaćanje</td><td>Deljen kod tamo gde ne šteti konverziji, nativno tamo gde UX/pouzdanost plaćanja to zahteva</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Podaci, poruke, infrastruktura</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Izbor</th><th>Obrazloženje</th></tr></thead>
+          <tbody>
+            <tr><td>OLTP baza</td><td>PostgreSQL 17 (Aurora/Cloud SQL upravljano)</td><td>ACID za ledger i Trip/Order agregate (poglavlje 06 i 09); najzreliji open-source RDBMS za finansijske podatke</td></tr>
+            <tr><td>Keš &amp; price lock</td><td>Redis (ElastiCache/Memorystore)</td><td>Fare cache TTL, distribuirani lock za price-freeze korak (poglavlje 04)</td></tr>
+            <tr><td>Search index</td><td>OpenSearch</td><td>Apache 2.0 licenca (izbegava Elastic license rizik), zreo za faceted filter pretragu ponuda</td></tr>
+            <tr><td>Event bus</td><td>Apache Kafka (Confluent Cloud upravljano)</td><td>Event sourcing za saga korake (poglavlje 05/06), replay za audit trag ka finansijama</td></tr>
+            <tr><td>Data warehouse</td><td>Snowflake ili BigQuery</td><td>BI, finansijsko izveštavanje, treniranje predictive pricing modela (poglavlje 04/17)</td></tr>
+            <tr><td>Orkestracija</td><td>Kubernetes (EKS/GKE) + Karpenter/autoscaling</td><td>Nezavisno skaliranje search servisa (burst) i booking/ledger servisa (konzistentnost pre brzine)</td></tr>
+            <tr><td>Infrastructure as Code</td><td>Terraform + Terragrunt</td><td>Industrijski standard, najveći broj gotovih provider modula (AWS/GCP/Stripe/Datadog…)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>CI/CD, testiranje, observability</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Izbor</th><th>Obrazloženje</th></tr></thead>
+          <tbody>
+            <tr><td>CI/CD</td><td>GitHub Actions + Argo CD (GitOps)</td><td>Deklarativni deploy, laka revizija ko je šta i kada pustio u produkciju — bitno za finansijski compliance</td></tr>
+            <tr><td>Contract testing</td><td>Pact</td><td>Ključno jer sistem zavisi od 8+ eksternih API ugovora (Amadeus, Sabre, Duffel, HotelBeds…) — hvata breaking promene dobavljača pre produkcije</td></tr>
+            <tr><td>E2E testiranje</td><td>Playwright</td><td>Pokriva ceo checkout flow uključujući 3DS redirect, brži i stabilniji od Selenium-a</td></tr>
+            <tr><td>Observability</td><td>OpenTelemetry + Grafana/Datadog</td><td>Distribuirani tracing kroz ceo saga lanac (5 eksternih sistema po Trip-u), vendor-neutralna instrumentacija (OTel) da izbegnemo lock-in</td></tr>
+            <tr><td>Error tracking</td><td>Sentry</td><td>Frontend + backend u istom alatu, source-map podrška za brz debug produkcije</td></tr>
+            <tr><td>Feature flags / eksperimenti</td><td>LaunchDarkly ili Statsig</td><td>A/B testing infrastruktura iz poglavlja 17, postepeni rollout pricing/ranking promena</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Plaćanja, bezbednost, dobavljači paketa</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sloj</th><th>Izbor</th><th>Obrazloženje</th></tr></thead>
+          <tbody>
+            <tr><td>Payment gateway</td><td>Adyen (primarni) + Stripe (fallback/tržišta gde Adyen ne pokriva)</td><td>Adyen jače u multi-currency/lokalnim payment metodama za EU/global OTA, Stripe najbolji developer experience za brz start</td></tr>
+            <tr><td>Fraud scoring</td><td>Stripe Radar / Adyen RevenueProtect + interni model</td><td>Kombinacija gotovog i internog modela treniranog na sopstvenim podacima o chargeback-ovima (poglavlje 09)</td></tr>
+            <tr><td>Secrets management</td><td>HashiCorp Vault ili cloud-native (AWS Secrets Manager)</td><td>API ključevi za 10+ eksternih dobavljača zahtevaju centralizovanu rotaciju, ne .env fajlove</td></tr>
+            <tr><td>Bezbednosno skeniranje</td><td>Snyk (dependency/SAST) + OWASP ZAP (DAST) u CI pipeline-u</td><td>Automatska provera pre svakog deploy-a, posebno bitno jer sistem čuva podatke o platnim karticama (PCI scope)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Dobavljači sadržaja</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vertikala</th><th>Izbor za MVP</th><th>Dopuna kasnije</th></tr></thead>
+          <tbody>
+            <tr><td>Letovi</td><td>Duffel (najbrži start, bez sopstvene IATA akreditacije — poglavlje 01)</td><td>Travelfusion (LCC dubina), zatim jedan GDS (Amadeus/Sabre) za full-service širinu</td></tr>
+            <tr><td>Smeštaj</td><td>Expedia Rapid API</td><td>HotelBeds za dodatnu regionalnu dubinu (posebno Evropa/LatAm), Booking.com Partner API kad obim opravda taj ugovor</td></tr>
+            <tr><td>Transferi</td><td>CarTrawler</td><td>HolidayTaxis za dodatnu pokrivenost aerodromskih transfera</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Proizvodni &amp; timski alati</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Namena</th><th>Izbor</th></tr></thead>
+          <tbody>
+            <tr><td>Dizajn</td><td>Figma</td></tr>
+            <tr><td>Upravljanje zadacima</td><td>Linear</td></tr>
+            <tr><td>API dokumentacija (interni + partner/white-label)</td><td>Stoplight ili Redocly (OpenAPI-first)</td></tr>
+            <tr><td>Interna dokumentacija</td><td>Notion</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <span class="callout-label">Princip izbora</span>
+        <p>Svaki alat u ovoj tabeli je biran po istom pravilu: <strong>koristi se u produkciji kod najmanje jednog OTA/fintech sistema uporedivog obima</strong> — izbegavamo eksperimentalne alate na kritičnom putu (plaćanje, ledger, ticketing), a zadržavamo prostor za novije alate (Statsig, Polars) samo tamo gde greška nije katastrofalna (eksperimentisanje, analitika).</p>
       </div>
     </section>
 
     <section id="roadmap">
-      <p class="section-kicker">19 — Plan realizacije</p>
+      <p class="section-kicker">20 — Plan realizacije</p>
       <h2>Fazna realizacija</h2>
       <div class="phase">
         <div class="phase-tag">FAZA 1</div>
