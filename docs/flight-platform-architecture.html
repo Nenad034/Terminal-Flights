@@ -344,7 +344,7 @@ html{scroll-behavior:smooth;}
       <li><a href="#supplier-layer"><span class="num">03</span>Supplier abstraction layer</a></li>
       <li><a href="#search"><span class="num">04</span>Search &amp; Shopping</a></li>
       <li><a href="#booking"><span class="num">05</span>Booking &amp; Order</a></li>
-      <li><a href="#bundling"><span class="num">06</span>Let + smeštaj + transfer</a></li>
+      <li><a href="#bundling"><span class="num">06</span>Granica integracije: smeštaj &amp; transfer</a></li>
       <li><a href="#payments"><span class="num">07</span>Plaćanja &amp; tiketing</a></li>
       <li><a href="#postsale"><span class="num">08</span>Post-sale &amp; IRROPS</a></li>
       <li><a href="#finance"><span class="num">09</span>Finansije &amp; računovodstvo</a></li>
@@ -358,7 +358,8 @@ html{scroll-behavior:smooth;}
       <li><a href="#analytics"><span class="num">17</span>Analytics &amp; eksperimentisanje</a></li>
       <li><a href="#localization"><span class="num">18</span>Lokalizacija &amp; pravni entiteti</a></li>
       <li><a href="#stack"><span class="num">19</span>Alati &amp; tehnologije</a></li>
-      <li><a href="#roadmap"><span class="num">20</span>Fazna realizacija</a></li>
+      <li><a href="#horizon"><span class="num">20</span>Horizont: naredni 5 godina</a></li>
+      <li><a href="#roadmap"><span class="num">21</span>Fazna realizacija</a></li>
     </ol>
   </nav>
 
@@ -473,7 +474,7 @@ html{scroll-behavior:smooth;}
           <div class="chips">
             <div class="chip accent">Search &amp; Shopping</div>
             <div class="chip accent">Order / Booking</div>
-            <div class="chip accent">Packaging <span class="fine">Trip agregat</span></div>
+            <div class="chip accent">Trip Composition <span class="fine">opciona granica ka hotel/transfer</span></div>
             <div class="chip accent">Payments &amp; Ticketing</div>
             <div class="chip accent">Post-sale &amp; IRROPS</div>
             <div class="chip accent">Ancillaries</div>
@@ -493,8 +494,8 @@ html{scroll-behavior:smooth;}
             <div class="chip">Travelfusion adapter</div>
             <div class="chip">Duffel adapter</div>
             <div class="chip">NDC direct adapters</div>
-            <div class="chip">Hotel adapters <span class="fine">Expedia, HotelBeds…</span></div>
-            <div class="chip">Transfer adapters <span class="fine">CarTrawler…</span></div>
+            <div class="chip">Hotel adapters <span class="fine">fallback, ako nema modula</span></div>
+            <div class="chip">Transfer adapters <span class="fine">fallback, ako nema modula</span></div>
           </div>
         </div>
         <div class="arrow-down">↓ finansijski sloj — nezavisan system of record ↓</div>
@@ -586,51 +587,51 @@ html{scroll-behavior:smooth;}
       <ul>
         <li>Izbor sedišta, prtljag, obroci, prioritetni ukrcaj — mapirani preko dobavljača na interni katalog ancillary usluga</li>
         <li>Sopstvene ancillary usluge (osiguranje putovanja, transfer do aerodroma, parking) — naša marža, ne zavisi od GDS-a</li>
-        <li>Dinamičko paketovanje (flight + hotel + rent-a-car) kroz zaseban Packaging servis — detaljno u poglavlju 06</li>
+        <li>Opciona veza ka smeštaju/transferu preko Trip Composition ugovora, ako platforma ima te module — detaljno u poglavlju 06</li>
       </ul>
     </section>
 
     <section id="bundling">
-      <p class="section-kicker">06 — Multi-proizvodna arhitektura</p>
-      <h2>Let + smeštaj + transfer</h2>
-      <p class="lede">Tržište se sve više ponaša kao jedna korpa, ne tri odvojene kupovine — Booking.com i Expedia rastu upravo na "flight + hotel + transfer" paketu jer marža na paket raste, a stopa otkazivanja pada u odnosu na pojedinačnu kupovinu. Ovo mora biti ugrađeno u arhitekturu od početka, ne dodato naknadno kao "jos jedan tab" pored pretrage letova.</p>
+      <p class="section-kicker">06 — Granica modula</p>
+      <h2>Granica integracije: smeštaj &amp; transfer</h2>
+      <p class="lede"><strong>Flights je centralni i samostalan modul ovog dokumenta.</strong> Smeštaj i transfer se ne grade kao deo njegovog jezgra — ne pretpostavljamo da ćemo sami držati hotelski ili transfer inventar. Ono što projektujemo je <strong>stabilna granica integracije</strong>, tako da Flights modul može, po potrebi, da se spoji sa modulima za smeštaj i transfer unutar šire platforme — bilo da su to naši budući moduli ili tuđi — bez ponovnog dizajniranja jezgra kad taj trenutak dođe.</p>
 
-      <h3>Prošireni supplier abstraction layer</h3>
-      <p>Isti adapter pattern iz poglavlja 03 se primenjuje na dva nova tipa dobavljača, sa istim principom — domenski servisi ne znaju odakle je soba ili transfer došao:</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Vertikala</th><th>Provajderi</th><th>Model integracije</th></tr></thead>
-          <tbody>
-            <tr><td>Smeštaj</td><td>Expedia Rapid API, Booking.com Partner/Demand API, HotelBeds (Hotelbeds Group), Amadeus Hotel Search/Booking, Duffel Stays</td><td>REST, net-rate + markup model isti kao kod letova; Rapid i HotelBeds imaju najširi globalni inventar sobA</td></tr>
-            <tr><td>Transferi &amp; ground transport</td><td>CarTrawler (rent-a-car + transferi), HolidayTaxis, GetTransfer, Welcome Pickups</td><td>REST; obično komisioni (agency) model bez potrebe za sopstvenom akreditacijom, slično Duffel-u kod letova</td></tr>
-          </tbody>
-        </table>
+      <div class="callout">
+        <span class="callout-label">Posledica po dizajn</span>
+        <p>Flights ne sme da zna <em>kako</em> hotel ili transfer modul radi iznutra — samo mora da poštuje isti <strong>Trip Composition ugovor</strong> koji bi poštovao bilo koji drugi modul koji mu se pridruži. To je razlika između "ugraditi hotel u Flights" (tight coupling, teško za razdvajanje kasnije) i "ostaviti mesto za hotel" (loose coupling, spaja se kad zatreba).</p>
       </div>
 
-      <h3>Interni model: Trip, ne Order</h3>
-      <p>Iznad pojedinačnih <code>Order</code> objekata (let, soba, transfer — svaki sa svojim dobavljačem, svojim PNR/rezervacijskim brojem i svojim pravilima otkazivanja) uvodimo agregat <strong>Trip</strong> koji ih grupiše u jednu korisnički vidljivu rezervaciju sa jednim checkoutom i jednim plaćanjem, ali internim zapisima po komponenti:</p>
-      <div class="flow">
-        <div class="flow-step"><div class="k">1 korisnik bira</div><div class="t">let + hotel + transfer u jednom flow-u</div></div>
-        <div class="flow-sep">→</div>
-        <div class="flow-step"><div class="k">2 jedan checkout</div><div class="t">jedna cena, jedno plaćanje</div></div>
-        <div class="flow-sep">→</div>
-        <div class="flow-step"><div class="k">3 tri paralelne sage</div><div class="t">booking saga po komponenti (poglavlje 05)</div></div>
-        <div class="flow-sep">→</div>
-        <div class="flow-step"><div class="k">4 Trip agregat</div><div class="t">tri Order zapisa, tri stavke u ledgeru, jedna potvrda za korisnika</div></div>
+      <h3>Trip Composition ugovor</h3>
+      <p>Umesto da Flights <em>vlasnički</em> upravlja hotelom i transferom, uvodimo tanak koordinacioni sloj — <code>Trip</code> je samo deljeni identifikator, ne agregat koji sadrži tuđe podatke:</p>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Deljeni Trip ID</h4>
+          <p>Kad korisnik u širem toku (van ovog modula) doda hotel/transfer uz let, drugi moduli se referenciraju na isti <code>trip_id</code> koji izdaje Flights modul — ali svaki modul ostaje vlasnik svog <code>Order</code>-a, svog ledgera i svojih pravila otkazivanja.</p>
+        </div>
+        <div class="card">
+          <h4>Event-driven orkestracija</h4>
+          <p>Checkout preko više modula se koordiniše asinhrono preko event ugovora (<code>trip.item.requested</code> / <code>trip.item.confirmed</code> / <code>trip.item.failed</code>) na zajedničkom event bus-u (poglavlje 10), ne sinhronim pozivom u tuđi kod — Flights ne blokira svoj booking flow čekajući hotel modul.</p>
+        </div>
+        <div class="card">
+          <h4>Odvojen ledger po modulu</h4>
+          <p>Flights ledger (poglavlje 09) knjiži samo ono što Flights proda. Ako se prikazuje zbirna faktura za ceo Trip, to je prezentacioni sloj koji čita iz više modula — finansijska odgovornost i BSP/ARC obaveze ostaju striktno u modulu koji je prodao tu stavku.</p>
+        </div>
+        <div class="card">
+          <h4>Fallback adapteri, isti ugovor</h4>
+          <p>Dok zaseban hotel/transfer modul ne postoji, mesto u arhitekturi je rezervisano: privremeni adapteri (Expedia Rapid, CarTrawler i sl. — poglavlje 03 pattern) mogu se prikačiti iza <em>istog</em> Trip Composition ugovora. Kad se pravi modul pojavi, on preuzima to mesto bez promene API-ja prema checkoutu ili korisničkom interfejsu.</p>
+        </div>
       </div>
-      <p>Ako jedna komponenta ne uspe (npr. hotel nema više raspoloživost u trenutku potvrde), ostale se ne poništavaju automatski — korisniku se nudi zamena ili refund samo te stavke, dok let i transfer ostaju važeći. Ovo je razlog zašto se saga po komponenti mora moći kompenzovati nezavisno, ne kao jedna velika transakcija za ceo Trip.</p>
 
-      <h3>Posledice po druge slojeve</h3>
+      <h3>Šta ovo znači za Order/Booking domen (poglavlje 05)</h3>
       <ul>
-        <li><strong>Ledger (poglavlje 09)</strong> — svaka komponenta Trip-a ima sopstveni net rate, maržu i, često, sopstvenu valutu i poreski tretman (smeštaj je po pravilu oporeziv PDV-om u zemlji pružanja usluge, za razliku od međunarodnog leta) — ledger mora knjižiti tri odvojena reda, ne jedan zbirni</li>
-        <li><strong>Zaštita putnika (poglavlje 15)</strong> — čim se let proda zajedno sa smeštajem ili transferom kao paket, po EU Package Travel Directive postajemo organizator putovanja i moramo obezbediti insolvency bonding (ovo je upravo razlog zašto je to poglavlje u dokumentu)</li>
-        <li><strong>Post-sale (poglavlje 08)</strong> — izmena/otkazivanje mora podržati delimično otkazivanje jedne komponente Trip-a bez diranja ostalih</li>
-        <li><strong>Ranking/pricing (poglavlje 04)</strong> — cross-sell trenutak (ponuda hotela odmah nakon izbora leta) je proizvodna odluka koja utiče na konverziju; A/B testira se kroz analytics sloj (poglavlje 17)</li>
+        <li>Interni model iz poglavlja 05 ostaje <code>Order</code> vezan isključivo za let — nema potrebe da Flights domen modeluje tuđa pravila otkazivanja, tuđ porez ili tuđu valutu</li>
+        <li>Checkout UI unutar Flights modula ostaje potpuno funkcionalan sam za sebe (let-only kupovina); cross-sell prema hotelu/transferu je opcioni korak koji poziva Trip Composition ugovor <em>ako</em> je drugi modul prisutan u toj instalaciji platforme</li>
+        <li>Zaštita putnika (poglavlje 15, EU Package Travel Directive) postaje relevantna tek u trenutku kad se dva modula stvarno spoje u jednu prodaju — do tada Flights posluje kao čist prevoznik-posrednik bez te obaveze</li>
       </ul>
 
       <div class="callout good">
         <span class="callout-label">Zašto ovo pišemo u kod od početka</span>
-        <p>Ako se <code>Order</code> model projektuje samo oko leta, dodavanje hotela i transfera kasnije znači rewrite booking i ledger servisa. Projektovanjem <code>Trip</code> agregata kao kontejnera za više nezavisnih <code>Order</code> objekata od prvog dana, dodavanje nove vertikale (npr. iznajmljivanje automobila, aktivnosti) postaje pitanje novog adaptera, ne nove arhitekture.</p>
+        <p>Cena projektovanja granice unapred je nekoliko dodatnih polja (<code>trip_id</code>, event šema) i disciplina da Flights ne poseže u tuđ ledger. Cena da se to ne uradi je mnogo veća: ako Flights direktno ugradi hotel inventar u sopstveni Order model, svaki budući spoj sa pravim hotel modulom (ili zamena dobavljača) znači migraciju podataka i rewrite checkouta, umesto priključivanja na već postojeći ugovor.</p>
       </div>
     </section>
 
@@ -1017,13 +1018,14 @@ html{scroll-behavior:smooth;}
       </div>
 
       <h3>Dobavljači sadržaja</h3>
+      <p>Letovi su jedina vertikala koju Flights modul stvarno gradi. Smeštaj i transfer su navedeni samo kao <strong>fallback iza Trip Composition ugovora</strong> (poglavlje 06) — koriste se jedino ako platforma u tom trenutku nema sopstveni modul za tu vertikalu; čim modul postoji, ove integracije se gase bez uticaja na Flights kod.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Vertikala</th><th>Izbor za MVP</th><th>Dopuna kasnije</th></tr></thead>
           <tbody>
-            <tr><td>Letovi</td><td>Duffel (najbrži start, bez sopstvene IATA akreditacije — poglavlje 01)</td><td>Travelfusion (LCC dubina), zatim jedan GDS (Amadeus/Sabre) za full-service širinu</td></tr>
-            <tr><td>Smeštaj</td><td>Expedia Rapid API</td><td>HotelBeds za dodatnu regionalnu dubinu (posebno Evropa/LatAm), Booking.com Partner API kad obim opravda taj ugovor</td></tr>
-            <tr><td>Transferi</td><td>CarTrawler</td><td>HolidayTaxis za dodatnu pokrivenost aerodromskih transfera</td></tr>
+            <tr><td>Letovi <span class="fine">jezgro modula</span></td><td>Duffel (najbrži start, bez sopstvene IATA akreditacije — poglavlje 01)</td><td>Travelfusion (LCC dubina), zatim jedan GDS (Amadeus/Sabre) za full-service širinu</td></tr>
+            <tr><td>Smeštaj <span class="fine">fallback</span></td><td>Expedia Rapid API — samo ako ne postoji poseban hotel modul</td><td>Ukida se čim je hotel modul dostupan preko Trip Composition ugovora</td></tr>
+            <tr><td>Transferi <span class="fine">fallback</span></td><td>CarTrawler — samo ako ne postoji poseban transfer modul</td><td>Ukida se čim je transfer modul dostupan preko Trip Composition ugovora</td></tr>
           </tbody>
         </table>
       </div>
@@ -1047,8 +1049,67 @@ html{scroll-behavior:smooth;}
       </div>
     </section>
 
+    <section id="horizon">
+      <p class="section-kicker">20 — Pogled unapred</p>
+      <h2>Horizont: naredni 5 godina</h2>
+      <p class="lede">Arhitektura iz ovog dokumenta nije neutralna prema vremenu — svaki izbor ili olakšava ili otežava sledeće promene u distribuciji, plaćanjima, identitetu i regulativi. Tabela ispod imenuje šta dolazi i gde je arhitektura već pripremljena za to, a gde treba dodatna odluka sada da bi tranzicija kasnije bila jeftina.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Trend (do ~2031)</th><th>Šta znači za nas</th><th>Status pripreme</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>IATA ONE Order &amp; Offer/Order Management</td>
+              <td>Klasična trojka PNR + tiket + EMD se gasi u korist jednog Order zapisa; GDS-ovi sami migriraju na ovaj model</td>
+              <td><span class="pill good">spremni</span><span class="fine">Interni model (poglavlje 05) je od starta Order-centričan, ne PNR-centričan</span></td>
+            </tr>
+            <tr>
+              <td>NDC kao primarni kanal distribucije</td>
+              <td>Sve više avio-kompanija gasi klasičan EDIFACT pristup i traži direktnu NDC konekciju; GDS postaje jedan od više kanala, ne podrazumevani</td>
+              <td><span class="pill good">spremni</span><span class="fine">Supplier abstraction layer (poglavlje 03) već tretira NDC i GDS kao ravnopravne adaptere</span></td>
+            </tr>
+            <tr>
+              <td>Agentic AI distribucija</td>
+              <td>Putnici sve više pretražuju i rezervišu preko AI agenata (LLM asistenti) koji pozivaju API-je direktno, ne kroz vizuelni UI; pojavljuju se standardi za mašinsko-čitljivu izloženost servisa (npr. MCP)</td>
+              <td><span class="pill amber">delimično</span><span class="fine">Interni Offer/Order model je već mašinski-čitljiv; treba dodati zaseban "agent-ready" API sloj (OpenAPI-first, poglavlje 19) pored korisničkog UI-ja</span></td>
+            </tr>
+            <tr>
+              <td>Account-to-Account (Open Banking) plaćanja</td>
+              <td>Real-time bankovni transferi kao alternativa karticama — niže naknade, brže poravnanje, sve zakonski podržano u EU/UK i sve više van njih</td>
+              <td><span class="pill amber">delimično</span><span class="fine">Payment gateway izbor (poglavlje 19) treba payment abstraction sloj koji dodaje A2A provajdera bez diranja domenskog Order/ledger modela</span></td>
+            </tr>
+            <tr>
+              <td>Digitalni putni identitet (ICAO DTC, biometrija)</td>
+              <td>Kontaktless prolazak kroz aerodrom preko digitalnih kredencijala umesto fizičkog pasoša/boarding pass-a</td>
+              <td><span class="pill amber">delimično</span><span class="fine">Putnički profil treba polje za verifiable credentials pored postojećih pasoš podataka — jeftino dodati sada, skupo naknadno</span></td>
+            </tr>
+            <tr>
+              <td>Regulacija algoritamskog određivanja cena</td>
+              <td>EU AI Act i slični okviri traže objašnjivost (explainability) i audit trag za automatizovane odluke koje utiču na cenu potrošača</td>
+              <td><span class="pill amber">delimično</span><span class="fine">Pricing/ranking engine (poglavlje 04) treba da loguje razlog svake dinamičke odluke o markupu od početka, ne naknadno</span></td>
+            </tr>
+            <tr>
+              <td>Obavezno izveštavanje o emisiji (CSRD, SAF mandati)</td>
+              <td>Avio-kompanije i posrednici sve više moraju da prikažu i prijave CO2/SAF (Sustainable Aviation Fuel) podatke po letu</td>
+              <td><span class="pill bad">nije pokriveno</span><span class="fine">Fare model (poglavlje 04) nema polje za emisione podatke — dodati kao opciono polje u Offer modelu da bude spremno kad dobavljači počnu da ga vraćaju</span></td>
+            </tr>
+            <tr>
+              <td>Passkeys/WebAuthn kao podrazumevana autentifikacija</td>
+              <td>Lozinke se postepeno gase kao primarni faktor; putnici očekuju biometrijsku prijavu i na webu, ne samo mobilnom</td>
+              <td><span class="pill good">spremni</span><span class="fine">Uvesti kao primarni auth mehanizam od MVP-a (poglavlje 19), ne dodavati naknadno preko lozinke</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout amber">
+        <span class="callout-label">Šta dodati u sprint plan sada</span>
+        <p>Od svega gore, tri stavke imaju realnu cenu odlaganja i vredi ih uneti u MVP obim (Faza 1, poglavlje 21): <strong>(1)</strong> opciono polje za emisione/SAF podatke u Offer modelu, <strong>(2)</strong> payment abstraction interfejs koji ne pretpostavlja da je kartica jedini instrument, i <strong>(3)</strong> passkey-first autentifikacija. Agent-ready API sloj i explainability log za pricing mogu čekati do Faze 3–4 bez rewrite rizika, jer se nadovezuju na postojeće Order/Offer modele umesto da ih menjaju.</p>
+      </div>
+    </section>
+
     <section id="roadmap">
-      <p class="section-kicker">20 — Plan realizacije</p>
+      <p class="section-kicker">21 — Plan realizacije</p>
       <h2>Fazna realizacija</h2>
       <div class="phase">
         <div class="phase-tag">FAZA 1</div>
