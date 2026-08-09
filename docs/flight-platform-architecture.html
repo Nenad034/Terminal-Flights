@@ -5,6 +5,11 @@
   src:local('Cascadia Code'),local('SF Mono'),local('Consolas');
 }
 :root{
+  --series-1:#2a78d6;
+  --series-2:#eb6834;
+  --series-3:#1baf7a;
+  --series-4:#eda100;
+  --series-5:#e87ba4;
   --bg:#f4f5f8;
   --surface:#ffffff;
   --surface-alt:#eaecf2;
@@ -32,6 +37,11 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
+    --series-1:#3987e5;
+    --series-2:#d95926;
+    --series-3:#199e70;
+    --series-4:#c98500;
+    --series-5:#d55181;
     --bg:#0c0f16;
     --surface:#121623;
     --surface-alt:#191f30;
@@ -56,6 +66,11 @@
   }
 }
 :root[data-theme="dark"]{
+  --series-1:#3987e5;
+  --series-2:#d95926;
+  --series-3:#199e70;
+  --series-4:#c98500;
+  --series-5:#d55181;
   --bg:#0c0f16;
   --surface:#121623;
   --surface-alt:#191f30;
@@ -270,6 +285,26 @@ td .fine{display:block; font-size:.78rem; color:var(--ink-faint); margin-top:.15
 .phase-body h4{margin:0 0 .3rem;}
 .phase-body p{margin-bottom:.5rem;}
 
+/* ---------- charts ---------- */
+.viz-root{
+  border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow);
+  padding:1.4rem 1.5rem 1.2rem; margin:1.5rem 0;
+}
+.viz-title{font-weight:700; font-size:.95rem; color:var(--ink); margin-bottom:.15rem;}
+.viz-sub{font-size:.8rem; color:var(--ink-faint); margin-bottom:1rem;}
+.viz-root svg{display:block; width:100%; height:auto; overflow:visible;}
+.viz-root .gridline{stroke:var(--line); stroke-width:1;}
+.viz-root .axis-label{fill:var(--ink-faint); font-family:var(--font-mono); font-size:10px;}
+.viz-root .bar-value{fill:var(--ink); font-family:var(--font-mono); font-size:12px; font-weight:700;}
+.viz-root .bar-cat{fill:var(--ink-soft); font-size:12px; font-weight:600; font-family:var(--font-body);}
+.viz-root rect.mark{cursor:default;}
+.viz-root rect.mark:hover{filter:brightness(1.08);}
+.legend-row{display:flex; flex-wrap:wrap; gap:1rem 1.4rem; margin-top:1.1rem; padding-top:1rem; border-top:1px solid var(--line-soft);}
+.legend-item{display:flex; align-items:center; gap:.5rem; font-size:.82rem; color:var(--ink-soft);}
+.legend-item .sw{width:10px; height:10px; border-radius:2px; flex:none;}
+.legend-item strong{color:var(--ink); font-weight:700;}
+.legend-item .pct{font-family:var(--font-mono); color:var(--ink-faint);}
+
 footer.doc-footer{
   border-top:1px solid var(--line); margin-top:2rem; padding-top:1.4rem;
   color:var(--ink-faint); font-size:.82rem;
@@ -316,12 +351,13 @@ html{scroll-behavior:smooth;}
       <li><a href="#security"><span class="num">10</span>Bezbednost &amp; compliance</a></li>
       <li><a href="#diferencijacija"><span class="num">11</span>Šta nas čini boljima</a></li>
       <li><a href="#business-model"><span class="num">12</span>Poslovni model &amp; pricing</a></li>
-      <li><a href="#protection"><span class="num">13</span>Zaštita putnika &amp; bonding</a></li>
-      <li><a href="#competition"><span class="num">14</span>Konkurentska analiza</a></li>
-      <li><a href="#analytics"><span class="num">15</span>Analytics &amp; eksperimentisanje</a></li>
-      <li><a href="#localization"><span class="num">16</span>Lokalizacija &amp; pravni entiteti</a></li>
-      <li><a href="#stack"><span class="num">17</span>Tehnološki stek</a></li>
-      <li><a href="#roadmap"><span class="num">18</span>Fazna realizacija</a></li>
+      <li><a href="#forecast"><span class="num">13</span>Projekcija prihoda</a></li>
+      <li><a href="#protection"><span class="num">14</span>Zaštita putnika &amp; bonding</a></li>
+      <li><a href="#competition"><span class="num">15</span>Konkurentska analiza</a></li>
+      <li><a href="#analytics"><span class="num">16</span>Analytics &amp; eksperimentisanje</a></li>
+      <li><a href="#localization"><span class="num">17</span>Lokalizacija &amp; pravni entiteti</a></li>
+      <li><a href="#stack"><span class="num">18</span>Tehnološki stek</a></li>
+      <li><a href="#roadmap"><span class="num">19</span>Fazna realizacija</a></li>
     </ol>
   </nav>
 
@@ -702,8 +738,92 @@ html{scroll-behavior:smooth;}
       <p>Prikaz cene mora eksplicitno razdvojiti <code>fare</code> / <code>takse</code> / <code>service fee</code> — ne samo zbog poverenja korisnika, nego jer to zahtevaju propisi u više jurisdikcija (npr. EU pravila o transparentnosti cena avio-karata, US DOT full-fare advertising rule). Dinamički markup po ruti/tražnji se implementira kroz pricing engine u Search &amp; Shopping domenu, ali granica marže (min/max) mora biti poslovno pravilo koje se ne menja bez odobrenja finansija.</p>
     </section>
 
+    <section id="forecast">
+      <p class="section-kicker">13 — Finansijski model</p>
+      <h2>Projekcija prihoda (Revenue Forecast)</h2>
+      <p class="lede">Bottom-up model za prve tri godine, izveden iz pretpostavki o broju rezervacija, prosečnoj vrednosti karte (AOV) i blended take rate-u (ponderisani prosek svih tokova prihoda iz poglavlja 12).</p>
+
+      <div class="callout amber">
+        <span class="callout-label">Napomena</span>
+        <p>Brojevi ispod su <strong>ilustrativni planski model</strong>, ne obavezujuća prognoza — struktura tabele i pretpostavki je ono što se prenosi finansijskom timu, a konkretne vrednosti (rezervacije, AOV, take rate) treba zameniti stvarnim podacima iz go-to-market plana pre upotrebe u budžetu ili pitch materijalu.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Godina</th><th>Rezervacije</th><th>AOV</th><th>Gross Booking Value</th><th>Blended take rate</th><th>Neto prihod</th></tr></thead>
+          <tbody>
+            <tr><td>Godina 1</td><td>45.000</td><td>€320</td><td>€14,4M</td><td>6,5%</td><td>€0,94M</td></tr>
+            <tr><td>Godina 2</td><td>140.000</td><td>€334</td><td>€46,8M</td><td>7,2%</td><td>€3,37M</td></tr>
+            <tr><td>Godina 3</td><td>320.000</td><td>€350</td><td>€112,0M</td><td>7,8%</td><td>€8,74M</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Take rate raste iz dva razloga: (1) mix prihoda se pomera ka maržnijim tokovima — ancillary i white-label rastu brže od baznog markupa — i (2) veći volumen otvara bolje net fare uslove kod dobavljača (poglavlje 01), što širi razliku između neto i prodajne cene.</p>
+
+      <div class="viz-root">
+        <div class="viz-title">Rast neto prihoda, Godina 1–3</div>
+        <div class="viz-sub">u milionima EUR · bottom-up model iz tabele iznad</div>
+        <svg viewBox="0 0 640 300" role="img" aria-label="Bar grafikon rasta neto prihoda: Godina 1 0,94 miliona evra, Godina 2 3,37 miliona evra, Godina 3 8,74 miliona evra">
+          <line class="gridline" x1="60" y1="240" x2="620" y2="240"></line>
+          <line class="gridline" x1="60" y1="196" x2="620" y2="196" stroke-dasharray="2,3"></line>
+          <line class="gridline" x1="60" y1="152" x2="620" y2="152" stroke-dasharray="2,3"></line>
+          <line class="gridline" x1="60" y1="108" x2="620" y2="108" stroke-dasharray="2,3"></line>
+          <line class="gridline" x1="60" y1="64" x2="620" y2="64" stroke-dasharray="2,3"></line>
+          <text class="axis-label" x="52" y="244" text-anchor="end">€0</text>
+          <text class="axis-label" x="52" y="200" text-anchor="end">€2,5M</text>
+          <text class="axis-label" x="52" y="156" text-anchor="end">€5M</text>
+          <text class="axis-label" x="52" y="112" text-anchor="end">€7,5M</text>
+          <text class="axis-label" x="52" y="68" text-anchor="end">€10M</text>
+
+          <rect class="mark" x="120" y="219" width="90" height="21" rx="4" fill="var(--series-1)"><title>Godina 1: €0,94M</title></rect>
+          <text class="bar-value" x="165" y="211" text-anchor="middle">€0,94M</text>
+          <text class="bar-cat" x="165" y="262" text-anchor="middle">Godina 1</text>
+
+          <rect class="mark" x="295" y="166" width="90" height="74" rx="4" fill="var(--series-1)"><title>Godina 2: €3,37M</title></rect>
+          <text class="bar-value" x="340" y="158" text-anchor="middle">€3,37M</text>
+          <text class="bar-cat" x="340" y="262" text-anchor="middle">Godina 2</text>
+
+          <rect class="mark" x="470" y="48" width="90" height="192" rx="4" fill="var(--series-1)"><title>Godina 3: €8,74M</title></rect>
+          <text class="bar-value" x="515" y="40" text-anchor="middle">€8,74M</text>
+          <text class="bar-cat" x="515" y="262" text-anchor="middle">Godina 3</text>
+        </svg>
+      </div>
+
+      <div class="viz-root">
+        <div class="viz-title">Struktura prihoda u Godini 3</div>
+        <div class="viz-sub">udeo svakog toka prihoda u ukupnih €8,74M — videti poglavlje 12 za definiciju svakog toka</div>
+        <svg viewBox="0 0 640 90" role="img" aria-label="Stubić sa 100 procenata koji prikazuje strukturu prihoda u godini 3: markup na net fare 42 procenta, service fee 16 procenata, ancillary komisija 20 procenata, affiliate 6 procenata, white-label API 16 procenata">
+          <rect class="mark" x="0" y="20" width="248" height="40" fill="var(--series-1)"><title>Markup na net fare: 42%</title></rect>
+          <rect class="mark" x="250" y="20" width="94" height="40" fill="var(--series-2)"><title>Service fee: 16%</title></rect>
+          <rect class="mark" x="346" y="20" width="118" height="40" fill="var(--series-3)"><title>Ancillary komisija: 20%</title></rect>
+          <rect class="mark" x="466" y="20" width="35" height="40" fill="var(--series-4)"><title>Affiliate/referral: 6%</title></rect>
+          <rect class="mark" x="503" y="20" width="118" height="40" fill="var(--series-5)"><title>White-label API: 16%</title></rect>
+        </svg>
+        <div class="legend-row">
+          <span class="legend-item"><span class="sw" style="background:var(--series-1)"></span><strong>Markup na net fare</strong><span class="pct">42%</span></span>
+          <span class="legend-item"><span class="sw" style="background:var(--series-2)"></span><strong>Service fee</strong><span class="pct">16%</span></span>
+          <span class="legend-item"><span class="sw" style="background:var(--series-3)"></span><strong>Ancillary komisija</strong><span class="pct">20%</span></span>
+          <span class="legend-item"><span class="sw" style="background:var(--series-4)"></span><strong>Affiliate/referral</strong><span class="pct">6%</span></span>
+          <span class="legend-item"><span class="sw" style="background:var(--series-5)"></span><strong>White-label API</strong><span class="pct">16%</span></span>
+        </div>
+      </div>
+
+      <h3>Put ka profitabilnosti</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Godina</th><th>EBITDA marža (ilustrativno)</th><th>Glavni pokretač</th></tr></thead>
+          <tbody>
+            <tr><td>Godina 1</td><td><span class="pill bad">−35%</span></td><td>Investicija u supplier integracije (poglavlje 03), IATA akreditaciju i tim; nizak volumen ne pokriva fiksne troškove</td></tr>
+            <tr><td>Godina 2</td><td><span class="pill amber">−5%</span></td><td>Volumen raste 3×, fiksni troškovi se amortizuju; white-label prihod počinje da doprinosi</td></tr>
+            <tr><td>Godina 3</td><td><span class="pill good">+18%</span></td><td>Take rate na zrelom nivou, ancillary i white-label nose veći deo marže nego bazni markup</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Najveća poluga za odstupanje od ovog modela nije broj rezervacija nego <strong>mix prihoda</strong> — svaki procentni poen pomeren iz čistog markupa (najniža marža, direktno izložen konkurenciji na ceni) u ancillary ili white-label (poglavlje 12) diže EBITDA maržu brže nego ekvivalentan rast obima.</p>
+    </section>
+
     <section id="protection">
-      <p class="section-kicker">13 — Regulatorna obaveza</p>
+      <p class="section-kicker">14 — Regulatorna obaveza</p>
       <h2>Zaštita putnika &amp; finansijsko obezbeđenje</h2>
       <p class="lede">Ovo je deo koji najviše startapa preskoči, a koji je zakonska prepreka za rast — posebno čim se let poveže sa hotelom ili rent-a-car uslugom u jedan paket.</p>
       <ul>
@@ -720,7 +840,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="competition">
-      <p class="section-kicker">14 — Tržišna pozicija</p>
+      <p class="section-kicker">15 — Tržišna pozicija</p>
       <h2>Konkurentska analiza</h2>
       <div class="table-wrap">
         <table>
@@ -738,7 +858,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="analytics">
-      <p class="section-kicker">15 — Merenje proizvoda</p>
+      <p class="section-kicker">16 — Merenje proizvoda</p>
       <h2>Analytics &amp; eksperimentisanje</h2>
       <p class="lede">Ranking, pricing i UX odluke iz poglavlja 04 i 12 ne smeju se donositi "na oko" — treba im merljiv funnel i eksperimentalna infrastruktura odvojena od finansijskog sistema od poverenja.</p>
       <div class="flow">
@@ -763,7 +883,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="localization">
-      <p class="section-kicker">16 — Multi-market</p>
+      <p class="section-kicker">17 — Multi-market</p>
       <h2>Lokalizacija &amp; pravni entiteti</h2>
       <ul>
         <li><strong>i18n arhitektura</strong> — prevod sadržaja, formati datuma/valute/broja po lokalu, RTL podrška ako se širimo na tržišta koja to zahtevaju; fare/tax podaci se uvek čuvaju u kanonskom obliku i tek na prikazu lokalizuju</li>
@@ -775,7 +895,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="stack">
-      <p class="section-kicker">17 — Preporuka</p>
+      <p class="section-kicker">18 — Preporuka</p>
       <h2>Tehnološki stek</h2>
       <div class="table-wrap">
         <table>
@@ -794,7 +914,7 @@ html{scroll-behavior:smooth;}
     </section>
 
     <section id="roadmap">
-      <p class="section-kicker">18 — Plan realizacije</p>
+      <p class="section-kicker">19 — Plan realizacije</p>
       <h2>Fazna realizacija</h2>
       <div class="phase">
         <div class="phase-tag">FAZA 1</div>
