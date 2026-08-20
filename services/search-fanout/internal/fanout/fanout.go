@@ -40,11 +40,17 @@ type PriceBreakdown struct {
 	Total    float64 `json:"total"`
 }
 
+// Offer mora da prenese SupplierOfferRef i ExpiresAt čak i ako se ovde ne
+// koriste za dedup/ranking — bez njih booking saga (§05) ne može da
+// rezerviše ponudu kod dobavljača (JSON decode→re-encode kroz Go strukturu
+// bez ovih polja bi ih tiho odbacio pre nego što stignu do frontenda).
 type Offer struct {
-	OfferID      string          `json:"offerId"`
-	SupplierCode string          `json:"supplierCode"`
-	Segments     []FlightSegment `json:"segments"`
-	Price        PriceBreakdown  `json:"price"`
+	OfferID          string          `json:"offerId"`
+	SupplierCode     string          `json:"supplierCode"`
+	SupplierOfferRef string          `json:"supplierOfferRef"`
+	Segments         []FlightSegment `json:"segments"`
+	Price            PriceBreakdown  `json:"price"`
+	ExpiresAt        string          `json:"expiresAt"`
 }
 
 type SearchResult struct {
