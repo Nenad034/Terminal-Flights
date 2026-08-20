@@ -24,13 +24,14 @@ export interface BookingRequest {
 }
 
 /**
- * Booking saga (§05): QC provera → rezerviši kod dobavljača → autorizuj
- * plaćanje → izdaj tiket → upiši u ledger. Ako bilo koji korak padne,
- * prethodni se kompenzuju (void/refund).
+ * Booking saga (§05): QC provera → rezerviši kod dobavljača → plati → upiši
+ * u ledger (Duffel izdaje tiket automatski nakon plaćanja). Ako bilo koji
+ * korak padne, prethodni se kompenzuju (order ostaje "held" na manuelni
+ * review, ne pokušavamo automatski void/refund dok ne znamo uzrok pada).
  *
- * F1 (delimično): implementirani su QC + supplier reservation koraci.
- * Payments/ticketing/ledger (§07, §09) ostaju TODO — order posle ovog koraka
- * je kod dobavljača "hold" (nenaplaćen), ne ticketed.
+ * F1: QC, supplier reservation, payment i minimalni ledger upis su
+ * implementirani. Eksplicitan ticketing korak za GDS dobavljače (gde nije
+ * automatski kao kod Duffel-a) ostaje TODO dok ti adapteri nisu aktivni.
  */
 export async function startBookingSaga(req: BookingRequest): Promise<Order> {
   const { rows } = await pool.query<{
@@ -59,6 +60,8 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
       [paid.status, paid.supplierOrderRef ?? reserved.supplierOrderRef ?? null, row.order_id]
     );
 
+    await writeLedgerEntries(row.order_id, req);
+
     return {
       orderId: row.order_id,
       tripId: row.trip_id ?? undefined,
@@ -82,9 +85,26 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
     throw err;
   }
 
-  // TODO (F1 nastavak): ticketing (dokumenti/e-tiketi) i upis u ledger_entries
-  // (§09) — Duffel izdaje tiket automatski nakon plaćanja, ali za dobavljače
-  // gde je ticketing poseban korak (GDS-ovi) ovde treba eksplicitan poziv.
+  // TODO (F1 nastavak): eksplicitna ticketing potvrda za dobavljače gde je to
+  // poseban korak (GDS-ovi) — Duffel izdaje tiket automatski nakon plaćanja,
+  // pa se to samo čita iz `paid.status` (postavljeno u DuffelAdapter.toOrder).
+}
+
+/**
+ * Minimalni dvostruki upis (§09 Glavna knjiga): potraživanje od kupca naspram
+ * obaveze prema dobavljaču, u istom iznosu. NAMERNO pojednostavljeno — puni
+ * kontni plan (raščlanjivanje na prihod, proviziju/markup, porez, trošak
+ * obrade plaćanja) dolazi tek kad postoji stvarni markup/komisioni model;
+ * ovde samo garantujemo da debit == credit za svaki order od prvog dana,
+ * umesto da se ledger doda naknadno kao "zakrpa" (§09, poslednji pasus).
+ */
+async function writeLedgerEntries(orderId: string, req: BookingRequest): Promise<void> {
+  await pool.query(
+    `INSERT INTO ledger_entries (order_id, account, debit, credit, currency)
+     VALUES ($1, 'accounts_receivable', $2, 0, $3),
+            ($1, 'supplier_payable', 0, $2, $3)`,
+    [orderId, req.totalAmount, req.currency]
+  );
 }
 
 /**

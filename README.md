@@ -75,10 +75,13 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   `src/adapters/*.ts` fajlu za tačan status i šta nedostaje.
 - **booking**: saga radi QC proveru (istekla ponuda?) → rezerviše kod
   dobavljača → plaća preko supplier-layer `/orders/:ref/pay` → upisuje status
-  u Postgres, sa kompenzacijom (order ostaje `pending`/held za manuelni
-  review ako plaćanje padne posle uspešne rezervacije, `failed` ako
-  rezervacija nikad nije uspela). Ticketing (dokumenti/e-tiketi) i upis u
-  ledger (§09) ostaju `TODO (F1 nastavak)`.
+  u Postgres → upiše minimalni dvostruki ledger zapis (`accounts_receivable`
+  / `supplier_payable`, §09 — puni kontni plan sa markup/proviziju/porezom
+  dolazi kad postoji stvarni komisioni model). Kompenzacija na grešku: order
+  ostaje `pending`/held za manuelni review ako plaćanje padne posle uspešne
+  rezervacije, `failed` ako rezervacija nikad nije uspela. Eksplicitan
+  ticketing korak za GDS dobavljače ostaje `TODO (F1 nastavak)` — Duffel
+  izdaje tiket automatski nakon plaćanja.
 - **search-fanout, pricing**: i dalje F0 — de-dup/ranking i predictive
   pricing model dolaze kasnije u F1/F4.
 
