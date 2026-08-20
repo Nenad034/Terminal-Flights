@@ -58,6 +58,33 @@ app.post("/orders", async (req, res) => {
   }
 });
 
+// Booking saga (§05/§07) poziva ovo da plati "hold" order kod dobavljača
+// koji je merchant of record (Duffel). 501 ako adapter ne podržava plaćanje
+// preko sebe (GDS dobavljači bi ovde bili no-op jer je naplata preko
+// sopstvenog PSP-a, van supplier adaptera — nije implementirano dok ti
+// adapteri nisu aktivni).
+app.post("/orders/:supplierOrderRef/pay", async (req, res) => {
+  const { supplierOrderRef } = req.params;
+  const { supplierCode, amount, currency } = req.body;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.payOrder) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support payment via supplier-layer` });
+    return;
+  }
+
+  try {
+    const order = await adapter.payOrder(supplierOrderRef, amount, currency);
+    res.json({ order });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[supplier-layer] listening on :${PORT}`);
 });

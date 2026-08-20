@@ -5,6 +5,7 @@ import type {
   DuffelOfferRequestResponse,
   DuffelOrderCancellationResponse,
   DuffelOrderResponse,
+  DuffelPaymentResponse,
   DuffelSegment,
 } from "./duffel-types.js";
 
@@ -173,6 +174,41 @@ export class DuffelAdapter implements SupplierAdapter {
 
     const json = (await res.json()) as DuffelOrderResponse;
     return this.toOrder(json.data, params.offerId);
+  }
+
+  /**
+   * Plaća "hold" order preko Duffel-ovog balance-a (§07 — Duffel je merchant
+   * of record, ne prolazi kroz sopstveni PSP). arc_bsp_cash je alternativa za
+   * agencije sa sopstvenim IATA/ARC odnosom — nije relevantno dok mi nemamo
+   * takav odnos, pa se ne izlaže kroz ovaj adapter.
+   */
+  async payOrder(supplierOrderRef: string, amount: number, currency: string): Promise<Order> {
+    const res = await fetch(`${this.apiBase}/air/payments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Duffel-Version": "v2",
+      },
+      body: JSON.stringify({
+        data: { order_id: supplierOrderRef, payment: { type: "balance", currency, amount: amount.toFixed(2) } },
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`[duffel] payment failed: ${res.status} ${await res.text()}`);
+    }
+    (await res.json()) as DuffelPaymentResponse; // odgovor nosi samo order_id; puno stanje se čita posebno
+
+    const orderRes = await fetch(`${this.apiBase}/air/orders/${supplierOrderRef}`, {
+      headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", "Duffel-Version": "v2" },
+    });
+    if (!orderRes.ok) {
+      throw new Error(`[duffel] order refetch after payment failed: ${orderRes.status} ${await orderRes.text()}`);
+    }
+    const json = (await orderRes.json()) as DuffelOrderResponse;
+    return this.toOrder(json.data, "");
   }
 
   private toOrder(order: DuffelOrderResponse["data"], offerId: string): Order {

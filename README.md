@@ -68,15 +68,17 @@ Zaustavi infra: `pnpm infra:down`.
 Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
 
 - **supplier-layer**: Duffel adapter potpuno implementiran (search, order
-  creation, payments-ready hold flow, dvofazno cancellation). Amadeus, Sabre,
-  Travelport, Travelfusion su registrovani u agregatoru kao stub-ovi
-  (`search()` vraća `[]`) dok se ne obezbedi komercijalni/sertifikacioni
-  pristup — videti komentare u svakom `src/adapters/*.ts` fajlu za tačan
-  status i šta nedostaje.
+  creation, payment preko Duffel balance-a jer je Duffel merchant of record
+  §07, dvofazno cancellation). Amadeus, Sabre, Travelport, Travelfusion su
+  registrovani u agregatoru kao stub-ovi (`search()` vraća `[]`) dok se ne
+  obezbedi komercijalni/sertifikacioni pristup — videti komentare u svakom
+  `src/adapters/*.ts` fajlu za tačan status i šta nedostaje.
 - **booking**: saga radi QC proveru (istekla ponuda?) → rezerviše kod
-  dobavljača preko supplier-layer `/orders` → upisuje status u Postgres, sa
-  kompenzacijom (status `failed`) na grešku. Payments, ticketing i upis u
-  ledger (§07, §09) ostaju `TODO (F1 nastavak)`.
+  dobavljača → plaća preko supplier-layer `/orders/:ref/pay` → upisuje status
+  u Postgres, sa kompenzacijom (order ostaje `pending`/held za manuelni
+  review ako plaćanje padne posle uspešne rezervacije, `failed` ako
+  rezervacija nikad nije uspela). Ticketing (dokumenti/e-tiketi) i upis u
+  ledger (§09) ostaju `TODO (F1 nastavak)`.
 - **search-fanout, pricing**: i dalje F0 — de-dup/ranking i predictive
   pricing model dolaze kasnije u F1/F4.
 

@@ -48,39 +48,43 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
 
   assertOfferStillValid(req);
 
+  let reserved: Order | undefined;
   try {
-    const supplierOrder = await reserveWithSupplier(req);
+    reserved = await reserveWithSupplier(req);
+    const paid = await payWithSupplier(req, reserved);
 
     const { rows: updated } = await pool.query<{ updated_at: string }>(
       `UPDATE orders SET status = $1, supplier_order_ref = $2, updated_at = now()
        WHERE order_id = $3 RETURNING updated_at`,
-      [supplierOrder.status, supplierOrder.supplierOrderRef ?? null, row.order_id]
+      [paid.status, paid.supplierOrderRef ?? reserved.supplierOrderRef ?? null, row.order_id]
     );
 
     return {
       orderId: row.order_id,
       tripId: row.trip_id ?? undefined,
       supplierCode: req.supplierCode as Order["supplierCode"],
-      supplierOrderRef: supplierOrder.supplierOrderRef,
+      supplierOrderRef: paid.supplierOrderRef ?? reserved.supplierOrderRef,
       offerId: req.offerId,
-      status: supplierOrder.status,
-      price: supplierOrder.price,
+      status: paid.status,
+      price: paid.price,
       createdAt: row.created_at,
       updatedAt: updated[0].updated_at,
     };
   } catch (err) {
-    // Kompenzacija: supplier reservation nije uspela (ili offer istekao),
-    // order ostaje trajno "failed" — nema šta da se poništi kod dobavljača
-    // jer do njega nije ni stiglo.
-    await pool.query(`UPDATE orders SET status = 'failed', updated_at = now() WHERE order_id = $1`, [
-      row.order_id,
-    ]);
+    // Kompenzacija: ako je rezervacija kod dobavljača uspela ali je plaćanje
+    // palo, order ostaje "held" kod dobavljača (nije naš problem da ga
+    // otkažemo automatski dok ne znamo zašto je palo — ostaje za manuelni
+    // review). Ako rezervacija nikad nije ni uspela, nema šta da se poništi.
+    await pool.query(
+      `UPDATE orders SET status = $1, supplier_order_ref = $2, updated_at = now() WHERE order_id = $3`,
+      [reserved ? "pending" : "failed", reserved?.supplierOrderRef ?? null, row.order_id]
+    );
     throw err;
   }
 
-  // TODO (F1 nastavak): payments servis (§07) da plati "hold" order, pa
-  // ticketing, pa upis u ledger_entries (§09) — svaki sa svojim kompenzacionim
-  // korakom (void order, refund) na fail.
+  // TODO (F1 nastavak): ticketing (dokumenti/e-tiketi) i upis u ledger_entries
+  // (§09) — Duffel izdaje tiket automatski nakon plaćanja, ali za dobavljače
+  // gde je ticketing poseban korak (GDS-ovi) ovde treba eksplicitan poziv.
 }
 
 /**
@@ -108,6 +112,25 @@ async function reserveWithSupplier(req: BookingRequest): Promise<Order> {
 
   if (!res.ok) {
     throw new Error(`supplier-layer order creation failed: ${res.status} ${await res.text()}`);
+  }
+
+  const json = (await res.json()) as { order: Order };
+  return json.order;
+}
+
+async function payWithSupplier(req: BookingRequest, reserved: Order): Promise<Order> {
+  if (!reserved.supplierOrderRef) {
+    throw new Error(`reserved order ${reserved.orderId} has no supplierOrderRef, cannot pay`);
+  }
+
+  const res = await fetch(`${SUPPLIER_LAYER_URL}/orders/${reserved.supplierOrderRef}/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ supplierCode: req.supplierCode, amount: req.totalAmount, currency: req.currency }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`supplier-layer payment failed: ${res.status} ${await res.text()}`);
   }
 
   const json = (await res.json()) as { order: Order };

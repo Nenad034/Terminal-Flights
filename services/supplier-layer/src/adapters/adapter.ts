@@ -45,6 +45,14 @@ export interface SupplierAdapter {
   readonly code: string;
   search(params: SearchParams): Promise<Offer[]>;
   createOrder?(params: CreateOrderParams): Promise<Order>;
+  /**
+   * Plaćanje "hold" order-a. Kod dobavljača koji su merchant of record
+   * (Duffel, Travelfusion — §07) ovo skida sredstva direktno preko njihovog
+   * API-ja, bez sopstvenog PSP-a. Kod GDS dobavljača (Amadeus/Sabre/Travelport)
+   * mi smo MoR, pa bi payOrder tamo bio no-op — naplata ide preko sopstvenog
+   * PSP-a (Stripe/Adyen) pre ovog koraka, van supplier adaptera.
+   */
+  payOrder?(supplierOrderRef: string, amount: number, currency: string): Promise<Order>;
   quoteCancellation?(orderId: string, supplierOrderRef: string): Promise<CancelQuote>;
   confirmCancellation?(supplierCancellationRef: string): Promise<void>;
 }

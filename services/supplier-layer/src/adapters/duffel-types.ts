@@ -71,6 +71,13 @@ export interface DuffelOrderResponse {
   data: DuffelOrder;
 }
 
+// Payments API — https://duffel.com/docs/api/payments/create-payment
+export interface DuffelPaymentResponse {
+  data: {
+    order_id: string;
+  };
+}
+
 // Order Cancellations API — https://duffel.com/docs/api/order-cancellations
 export interface DuffelOrderCancellation {
   id: string;
