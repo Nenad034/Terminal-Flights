@@ -82,8 +82,12 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   rezervacije, `failed` ako rezervacija nikad nije uspela. Eksplicitan
   ticketing korak za GDS dobavljače ostaje `TODO (F1 nastavak)` — Duffel
   izdaje tiket automatski nakon plaćanja.
-- **search-fanout, pricing**: i dalje F0 — de-dup/ranking i predictive
-  pricing model dolaze kasnije u F1/F4.
+- **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
+  + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
+  presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni
+  podaci o ponašanju korisnika.
+- **pricing**: i dalje F0 — predictive pricing model dolazi kasnije u F4, kad
+  data warehouse ima dovoljno istorije.
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").

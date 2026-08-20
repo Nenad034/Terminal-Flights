@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -24,11 +26,25 @@ type SearchParams struct {
 	ReturnDate    string `json:"returnDate,omitempty"`
 }
 
-// Offer je minimalna projekcija zajedničkog internog Offer modela (§03) —
-// puna definicija živi u packages/shared-types (TypeScript strana).
+// FlightSegment i PriceBreakdown prate polja koja su nam potrebna za de-dup i
+// ranking (§04) — projekcija zajedničkog internog Offer modela iz
+// packages/shared-types, ne puna definicija.
+type FlightSegment struct {
+	MarketingCarrier string `json:"marketingCarrier"`
+	FlightNumber     string `json:"flightNumber"`
+	DepartureAt      string `json:"departureAt"`
+}
+
+type PriceBreakdown struct {
+	Currency string  `json:"currency"`
+	Total    float64 `json:"total"`
+}
+
 type Offer struct {
-	OfferID      string `json:"offerId"`
-	SupplierCode string `json:"supplierCode"`
+	OfferID      string          `json:"offerId"`
+	SupplierCode string          `json:"supplierCode"`
+	Segments     []FlightSegment `json:"segments"`
+	Price        PriceBreakdown  `json:"price"`
 }
 
 type SearchResult struct {
@@ -73,6 +89,45 @@ func (o *Orchestrator) Search(ctx context.Context, params SearchParams) (*Search
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	// TODO (F1): de-dup po ruti/vremenu preko više izvora + ranking engine (§04).
+	result.Offers = dedupAndRank(result.Offers)
 	return &result, nil
+}
+
+// dedupAndRank spaja identične letove koje je vratilo više dobavljača (isti
+// carrier/broj leta/vreme polaska na svakom segmentu) i zadržava najjeftiniju
+// ponudu po itineraru, pa sortira preostale po ukupnoj ceni rastuće.
+//
+// F1 skeleton ranking-a (§04): samo cena. Puni ranking (trajanje, broj
+// presedanja, preferirani dobavljač, korisnički signali) dolazi kasnije —
+// namerno ne izmišljamo scoring formulu bez stvarnih podataka o ponašanju
+// korisnika.
+func dedupAndRank(offers []Offer) []Offer {
+	best := make(map[string]Offer, len(offers))
+
+	for _, offer := range offers {
+		key := itineraryKey(offer)
+		existing, seen := best[key]
+		if !seen || offer.Price.Total < existing.Price.Total {
+			best[key] = offer
+		}
+	}
+
+	deduped := make([]Offer, 0, len(best))
+	for _, offer := range best {
+		deduped = append(deduped, offer)
+	}
+
+	sort.Slice(deduped, func(i, j int) bool {
+		return deduped[i].Price.Total < deduped[j].Price.Total
+	})
+
+	return deduped
+}
+
+func itineraryKey(offer Offer) string {
+	parts := make([]string, len(offer.Segments))
+	for i, seg := range offer.Segments {
+		parts[i] = seg.MarketingCarrier + seg.FlightNumber + "@" + seg.DepartureAt
+	}
+	return strings.Join(parts, "|")
 }
