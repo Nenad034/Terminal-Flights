@@ -47,10 +47,9 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
   );
   const row = rows[0];
 
-  assertOfferStillValid(req);
-
   let reserved: Order | undefined;
   try {
+    assertOfferStillValid(req);
     reserved = await reserveWithSupplier(req);
     const paid = await payWithSupplier(req, reserved);
 
