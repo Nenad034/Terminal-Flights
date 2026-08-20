@@ -1,0 +1,19 @@
+{
+  "name": "terminal-flights",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Terminal Flights — platforma za pretragu i rezervaciju letova (monorepo)",
+  "scripts": {
+    "dev:web": "pnpm --filter @terminal-flights/web dev",
+    "dev:supplier-layer": "pnpm --filter @terminal-flights/supplier-layer dev",
+    "dev:booking": "pnpm --filter @terminal-flights/booking dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

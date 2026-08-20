@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# env
+.env
+.env.local
+*.env
+
+# go
+services/search-fanout/search-fanout
+services/search-fanout/tmp/
+
+# python
+services/pricing/__pycache__/
+services/pricing/.venv/
+**/__pycache__/
+*.pyc
+
+# logs
+*.log
+npm-debug.log*
+
+# os
+.DS_Store
+Thumbs.db
+
+# ide
+.vscode/
+.idea/
