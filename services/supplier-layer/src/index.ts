@@ -1,11 +1,23 @@
 import express from "express";
+import { AmadeusAdapter } from "./adapters/amadeus.js";
 import { DuffelAdapter } from "./adapters/duffel.js";
+import { SabreAdapter } from "./adapters/sabre.js";
+import { TravelfusionAdapter } from "./adapters/travelfusion.js";
+import { TravelportAdapter } from "./adapters/travelport.js";
 import type { SupplierAdapter } from "./adapters/adapter.js";
 
 const PORT = process.env.SUPPLIER_LAYER_PORT ?? 4001;
 
+// Agregator: svaki dobavljač je jedan adapter iza istog SupplierAdapter
+// ugovora (§03). Duffel je jedini aktivan (self-serve, bez sertifikacije) —
+// ostali su registrovani kao stub-ovi (search() -> []) dok se ne obezbedi
+// komercijalni/sertifikacioni pristup; videti komentare u svakom fajlu.
 const adapters: SupplierAdapter[] = [
   new DuffelAdapter(process.env.DUFFEL_API_KEY ?? "", process.env.DUFFEL_API_BASE),
+  new AmadeusAdapter(),
+  new SabreAdapter(),
+  new TravelportAdapter(),
+  new TravelfusionAdapter(),
 ];
 
 const app = express();
@@ -20,6 +32,30 @@ app.post("/search", async (req, res) => {
   const params = req.body;
   const results = await Promise.all(adapters.map((adapter) => adapter.search(params)));
   res.json({ offers: results.flat() });
+});
+
+// Booking saga (§05) poziva ovo da napravi order kod konkretnog dobavljača.
+// 501 ako adapter za taj supplierCode ne podržava createOrder (npr. jer nije
+// još sertifikovan — Amadeus/Sabre/Travelport/Travelfusion stub-ovi, §03).
+app.post("/orders", async (req, res) => {
+  const { supplierCode, ...params } = req.body;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.createOrder) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support order creation yet` });
+    return;
+  }
+
+  try {
+    const order = await adapter.createOrder(params);
+    res.status(201).json({ order });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
 });
 
 app.listen(PORT, () => {

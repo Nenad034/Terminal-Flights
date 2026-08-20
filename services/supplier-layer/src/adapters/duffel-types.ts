@@ -52,3 +52,35 @@ export interface DuffelOfferRequestResponse {
     offers: DuffelOffer[];
   };
 }
+
+// Orders API — https://duffel.com/docs/api/orders
+export interface DuffelOrder {
+  id: string;
+  booking_reference: string;
+  total_amount: string;
+  total_currency: string;
+  payment_status: {
+    awaiting_payment: boolean;
+    payment_required_by: string | null;
+    price_guarantee_expires_at: string | null;
+  };
+  documents: Array<{ type: string; unique_identifier: string }>;
+}
+
+export interface DuffelOrderResponse {
+  data: DuffelOrder;
+}
+
+// Order Cancellations API — https://duffel.com/docs/api/order-cancellations
+export interface DuffelOrderCancellation {
+  id: string;
+  order_id: string;
+  refund_amount: string | null;
+  refund_currency: string | null;
+  expires_at: string;
+  confirmed_at: string | null;
+}
+
+export interface DuffelOrderCancellationResponse {
+  data: DuffelOrderCancellation;
+}

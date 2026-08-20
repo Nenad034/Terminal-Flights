@@ -1,6 +1,12 @@
-import type { FareRules, FlightSegment, Offer } from "@terminal-flights/shared-types";
-import type { SearchParams, SupplierAdapter } from "./adapter.js";
-import type { DuffelOffer, DuffelOfferRequestResponse, DuffelSegment } from "./duffel-types.js";
+import type { FareRules, FlightSegment, Offer, Order } from "@terminal-flights/shared-types";
+import type { CancelQuote, CreateOrderParams, SearchParams, SupplierAdapter } from "./adapter.js";
+import type {
+  DuffelOffer,
+  DuffelOfferRequestResponse,
+  DuffelOrderCancellationResponse,
+  DuffelOrderResponse,
+  DuffelSegment,
+} from "./duffel-types.js";
 
 /**
  * Duffel adapter — izabran za MVP sadržaj letova (§01, §19): moderan REST/JSON API,
@@ -125,5 +131,110 @@ export class DuffelAdapter implements SupplierAdapter {
       }
     }
     return 0;
+  }
+
+  /**
+   * Kreira order kao "hold" (bez odmah izvršenog plaćanja) — plaćanje ide kroz
+   * poseban payments korak u booking sagi (§05), koji poziva
+   * POST /air/payments nakon što ovaj order postoji. To booking sagi daje
+   * mesto da uradi QC/validacioni korak (cena/dostupnost/pravila i dalje važe)
+   * pre nego što se novac stvarno pokrene.
+   */
+  async createOrder(params: CreateOrderParams): Promise<Order> {
+    const body = {
+      data: {
+        type: "hold",
+        selected_offers: [params.supplierOfferRef],
+        passengers: params.passengers.map((p) => ({
+          given_name: p.givenName,
+          family_name: p.familyName,
+          born_on: p.bornOn,
+          gender: p.gender,
+          email: p.email,
+          phone_number: p.phoneNumber,
+        })),
+      },
+    };
+
+    const res = await fetch(`${this.apiBase}/air/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Duffel-Version": "v2",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(`[duffel] order creation failed: ${res.status} ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as DuffelOrderResponse;
+    return this.toOrder(json.data, params.offerId);
+  }
+
+  private toOrder(order: DuffelOrderResponse["data"], offerId: string): Order {
+    const now = new Date().toISOString();
+    return {
+      orderId: order.id,
+      supplierCode: "duffel",
+      supplierOrderRef: order.booking_reference,
+      offerId,
+      status: order.documents.length > 0 ? "ticketed" : order.payment_status.awaiting_payment ? "pending" : "booked",
+      price: { currency: order.total_currency, base: 0, taxes: 0, total: Number(order.total_amount) },
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /**
+   * Otkazivanje je dvofazno kod Duffel-a: prvo se traži kotacija (koliko će se
+   * refundirati), pa se ta kotacija posebno potvrđuje. Ovo namerno ne vraća
+   * novac odmah — booking saga (§05) treba da prikaže iznos refunda korisniku
+   * pre potvrde, ili da ima svoju politiku za auto-potvrdu.
+   */
+  async quoteCancellation(_orderId: string, supplierOrderRef: string): Promise<CancelQuote> {
+    const res = await fetch(`${this.apiBase}/air/order_cancellations`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Duffel-Version": "v2",
+      },
+      body: JSON.stringify({ data: { order_id: supplierOrderRef } }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`[duffel] cancellation quote failed: ${res.status} ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as DuffelOrderCancellationResponse;
+    return {
+      supplierCancellationRef: json.data.id,
+      refundAmount: Number(json.data.refund_amount ?? 0),
+      refundCurrency: json.data.refund_currency ?? "EUR",
+      expiresAt: json.data.expires_at,
+    };
+  }
+
+  async confirmCancellation(supplierCancellationRef: string): Promise<void> {
+    const res = await fetch(
+      `${this.apiBase}/air/order_cancellations/${supplierCancellationRef}/actions/confirm`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          Accept: "application/json",
+          "Duffel-Version": "v2",
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`[duffel] cancellation confirm failed: ${res.status} ${await res.text()}`);
+    }
   }
 }

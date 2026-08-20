@@ -65,8 +65,20 @@ Zaustavi infra: `pnpm infra:down`.
 
 ## Status implementacije
 
-Svi servisi su **F0 skeletoni**: imaju `/health`, osnovnu strukturu i mesto gde
-dolazi poslovna logika (označeno `TODO (F1...)` komentarima u kodu). Sledeći
-korak je F1 MVP: puna Search & Shopping orkestracija, Booking saga do kraja
-(payments, ticketing, ledger) — prati tok opisan u `docs/00-MAPA-MODULA.html`
-(dugme "Prikaži tok kupovine karte").
+Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
+
+- **supplier-layer**: Duffel adapter potpuno implementiran (search, order
+  creation, payments-ready hold flow, dvofazno cancellation). Amadeus, Sabre,
+  Travelport, Travelfusion su registrovani u agregatoru kao stub-ovi
+  (`search()` vraća `[]`) dok se ne obezbedi komercijalni/sertifikacioni
+  pristup — videti komentare u svakom `src/adapters/*.ts` fajlu za tačan
+  status i šta nedostaje.
+- **booking**: saga radi QC proveru (istekla ponuda?) → rezerviše kod
+  dobavljača preko supplier-layer `/orders` → upisuje status u Postgres, sa
+  kompenzacijom (status `failed`) na grešku. Payments, ticketing i upis u
+  ledger (§07, §09) ostaju `TODO (F1 nastavak)`.
+- **search-fanout, pricing**: i dalje F0 — de-dup/ranking i predictive
+  pricing model dolaze kasnije u F1/F4.
+
+Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
+karte").
