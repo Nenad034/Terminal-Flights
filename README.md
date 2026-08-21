@@ -123,7 +123,8 @@ karte").
 
 `services/booking` i `services/supplier-layer` imaju vitest jedinične
 testove (`pnpm test` za ceo workspace preko `--if-present`, ili
-`pnpm --filter <ime> test` za jedan servis):
+`pnpm --filter <ime> test` za jedan servis), `services/search-fanout` ima Go
+testove (`go test ./...`):
 
 - **booking**: saga i otkazivanje — mock-uju `pool.query` i `fetch`, pokrivaju
   kompenzacione putanje (QC odbijanje, pad rezervacije, pad plaćanja) jer su
@@ -132,6 +133,10 @@ testove (`pnpm test` za ceo workspace preko `--if-present`, ili
   order status derivacija, payment→ticketed prelaz), graceful degrade bez
   ključa/na grešku, dvofazno cancellation (default refund vrednosti kad
   Duffel vrati `null`).
+- **search-fanout**: de-dup/ranking (`dedupAndRank`) — zadržavanje
+  najjeftinije ponude po itineraru, sortiranje, i orkestracija (`Search`) sa
+  mock supplier-layer HTTP serverom (`httptest`) koja proverava da
+  `passengers` polje stvarno stigne do supplier-layer poziva.
 
 CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. Ostali servisi
-(search-fanout, pricing, web) još nemaju automatske testove.
+(pricing, web) još nemaju automatske testove.
