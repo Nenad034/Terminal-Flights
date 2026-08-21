@@ -105,11 +105,17 @@ karte").
 
 ## Testovi
 
-`services/booking` ima vitest jedinične testove (`pnpm --filter
-@terminal-flights/booking test`, ili `pnpm test` za ceo workspace preko
-`--if-present`) za sagu i otkazivanje — mock-uju `pool.query` i `fetch`, bez
-potrebe za pravom bazom/servisima. Pokrivaju kompenzacione putanje (QC
-odbijanje, pad rezervacije, pad plaćanja) jer su se tu do sada dešavale prave
-greške pri ručnom testiranju. CI (`.github/workflows/ci.yml`) ih pokreće pre
-build koraka. Ostali servisi (supplier-layer, search-fanout, pricing, web)
-još nemaju automatske testove.
+`services/booking` i `services/supplier-layer` imaju vitest jedinične
+testove (`pnpm test` za ceo workspace preko `--if-present`, ili
+`pnpm --filter <ime> test` za jedan servis):
+
+- **booking**: saga i otkazivanje — mock-uju `pool.query` i `fetch`, pokrivaju
+  kompenzacione putanje (QC odbijanje, pad rezervacije, pad plaćanja) jer su
+  se tu do sada dešavale prave greške pri ručnom testiranju.
+- **supplier-layer**: Duffel adapter — mapiranje Offer/Order (search, hold
+  order status derivacija, payment→ticketed prelaz), graceful degrade bez
+  ključa/na grešku, dvofazno cancellation (default refund vrednosti kad
+  Duffel vrati `null`).
+
+CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. Ostali servisi
+(search-fanout, pricing, web) još nemaju automatske testove.
