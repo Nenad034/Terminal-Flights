@@ -57,6 +57,7 @@ async function searchFlights(params: {
   origin: string;
   destination: string;
   departureDate: string;
+  passengers: { adults: number };
 }) {
   const res = await fetch("/api/search", {
     method: "POST",
@@ -80,7 +81,11 @@ async function fetchAncillaries(offer: SearchOffer) {
   return data.options!;
 }
 
-async function bookOffer(offer: SearchOffer, passenger: Passenger, seat: AncillaryOption | null) {
+async function bookOffer(offer: SearchOffer, passengers: Passenger[], seat: AncillaryOption | null) {
+  // Duffel naplaćuje po ponudi, ne po putniku — offer.price.total već
+  // pokriva sve putnike iz search zahteva. Sedište je trenutno ograničeno na
+  // 1 putnika (vidi komentar u UI-ju) pa ovde nema potrebe za sumiranjem po
+  // putniku.
   const totalAmount = offer.price.total + (seat?.price.total ?? 0);
 
   const res = await fetch("/api/booking", {
@@ -93,7 +98,7 @@ async function bookOffer(offer: SearchOffer, passenger: Passenger, seat: Ancilla
       expiresAt: offer.expiresAt,
       currency: offer.price.currency,
       totalAmount,
-      passengers: [passenger],
+      passengers,
       serviceIds: seat ? [seat.serviceId] : undefined,
     }),
   });
@@ -130,14 +135,15 @@ const emptyPassenger: Passenger = {
 };
 
 // Minimalna search + booking forma (§04/§05) — puni ranking/price-freeze UX
-// i višeputnički checkout dolaze kasnije. Za sada: pretraži → izaberi ponudu
-// → unesi jednog putnika → rezerviši.
+// dolazi kasnije. Za sada: pretraži (sa brojem putnika) → izaberi ponudu →
+// unesi podatke za svakog putnika → rezerviši.
 export function SearchForm() {
   const [origin, setOrigin] = useState("BEG");
   const [destination, setDestination] = useState("JFK");
   const [departureDate, setDepartureDate] = useState("");
+  const [adults, setAdults] = useState(1);
   const [selectedOffer, setSelectedOffer] = useState<SearchOffer | null>(null);
-  const [passenger, setPassenger] = useState<Passenger>(emptyPassenger);
+  const [passengers, setPassengers] = useState<Passenger[]>([emptyPassenger]);
   const [selectedSeat, setSelectedSeat] = useState<AncillaryOption | null>(null);
 
   const searchMutation = useMutation({ mutationFn: searchFlights });
@@ -147,7 +153,7 @@ export function SearchForm() {
     enabled: selectedOffer !== null,
   });
   const bookMutation = useMutation({
-    mutationFn: (p: Passenger) => bookOffer(selectedOffer!, p, selectedSeat),
+    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, selectedSeat),
   });
   const quoteMutation = useMutation({
     mutationFn: (orderId: string) => quoteCancellation(orderId),
@@ -159,12 +165,12 @@ export function SearchForm() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
       <form
-        className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-4"
         onSubmit={(e) => {
           e.preventDefault();
           setSelectedOffer(null);
           bookMutation.reset();
-          searchMutation.mutate({ origin, destination, departureDate });
+          searchMutation.mutate({ origin, destination, departureDate, passengers: { adults } });
         }}
       >
         <label className="flex flex-col gap-1 text-sm text-slate-300">
@@ -192,6 +198,17 @@ export function SearchForm() {
             className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
             value={departureDate}
             onChange={(e) => setDepartureDate(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-slate-300">
+          Putnici
+          <input
+            type="number"
+            min={1}
+            max={9}
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={adults}
+            onChange={(e) => setAdults(Math.min(9, Math.max(1, Number(e.target.value) || 1)))}
           />
         </label>
         <button
@@ -226,6 +243,7 @@ export function SearchForm() {
                   onClick={() => {
                     setSelectedOffer(offer);
                     setSelectedSeat(null);
+                    setPassengers(Array.from({ length: adults }, () => ({ ...emptyPassenger })));
                     bookMutation.reset();
                   }}
                 >
@@ -252,18 +270,23 @@ export function SearchForm() {
           className="space-y-3 border-t border-slate-800 pt-4"
           onSubmit={(e) => {
             e.preventDefault();
-            bookMutation.mutate(passenger);
+            bookMutation.mutate(passengers);
           }}
         >
           <p className="text-sm text-slate-300">
             Rezervacija za {selectedOffer.price.total + (selectedSeat?.price.total ?? 0)}{" "}
-            {selectedOffer.price.currency} — podaci putnika
+            {selectedOffer.price.currency} — podaci putnika ({passengers.length})
           </p>
 
           {ancillariesQuery.isLoading && (
             <p className="text-xs text-slate-500">Proveravam dostupna sedišta...</p>
           )}
-          {ancillariesQuery.isSuccess && ancillariesQuery.data.length > 0 && (
+          {/* Duffel-ov seat_maps odgovor vezuje sedište za njihov interni
+              passenger_id, a mi taj ID ne prikupljamo/pratimo za više
+              putnika u ovoj fazi (§07 — videti komentar u duffel.ts) — zato
+              je izbor sedišta ograničen na rezervacije sa jednim putnikom
+              dok se ne doda mapiranje po putniku. */}
+          {passengers.length === 1 && ancillariesQuery.isSuccess && ancillariesQuery.data.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-slate-500">Sedište (opciono)</p>
               <div className="flex flex-wrap gap-2">
@@ -296,53 +319,63 @@ export function SearchForm() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <input
-              required
-              placeholder="Ime"
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.givenName}
-              onChange={(e) => setPassenger({ ...passenger, givenName: e.target.value })}
-            />
-            <input
-              required
-              placeholder="Prezime"
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.familyName}
-              onChange={(e) => setPassenger({ ...passenger, familyName: e.target.value })}
-            />
-            <input
-              required
-              type="date"
-              placeholder="Datum rođenja"
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.bornOn}
-              onChange={(e) => setPassenger({ ...passenger, bornOn: e.target.value })}
-            />
-            <select
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.gender}
-              onChange={(e) => setPassenger({ ...passenger, gender: e.target.value as "m" | "f" })}
-            >
-              <option value="m">Muško</option>
-              <option value="f">Žensko</option>
-            </select>
-            <input
-              required
-              type="email"
-              placeholder="Email"
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.email}
-              onChange={(e) => setPassenger({ ...passenger, email: e.target.value })}
-            />
-            <input
-              required
-              placeholder="Telefon"
-              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-              value={passenger.phoneNumber}
-              onChange={(e) => setPassenger({ ...passenger, phoneNumber: e.target.value })}
-            />
-          </div>
+          {passengers.map((passenger, i) => {
+            const update = (patch: Partial<Passenger>) =>
+              setPassengers(passengers.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+
+            return (
+              <div key={i} className="space-y-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Putnik {i + 1}</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input
+                    required
+                    placeholder="Ime"
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.givenName}
+                    onChange={(e) => update({ givenName: e.target.value })}
+                  />
+                  <input
+                    required
+                    placeholder="Prezime"
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.familyName}
+                    onChange={(e) => update({ familyName: e.target.value })}
+                  />
+                  <input
+                    required
+                    type="date"
+                    placeholder="Datum rođenja"
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.bornOn}
+                    onChange={(e) => update({ bornOn: e.target.value })}
+                  />
+                  <select
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.gender}
+                    onChange={(e) => update({ gender: e.target.value as "m" | "f" })}
+                  >
+                    <option value="m">Muško</option>
+                    <option value="f">Žensko</option>
+                  </select>
+                  <input
+                    required
+                    type="email"
+                    placeholder="Email"
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.email}
+                    onChange={(e) => update({ email: e.target.value })}
+                  />
+                  <input
+                    required
+                    placeholder="Telefon"
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={passenger.phoneNumber}
+                    onChange={(e) => update({ phoneNumber: e.target.value })}
+                  />
+                </div>
+              </div>
+            );
+          })}
           <button
             type="submit"
             className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"

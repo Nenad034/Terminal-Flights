@@ -18,12 +18,22 @@ import (
 	"time"
 )
 
+// Passengers mora ostati deo SearchParams (ne samo "podrazumevano 1 odrasla
+// osoba") — isti razlog kao SupplierOfferRef/ExpiresAt na Offer-u ispod:
+// Go decode→re-encode tiho odbacuje polja koja struktura ne poznaje.
+type Passengers struct {
+	Adults   int `json:"adults"`
+	Children int `json:"children,omitempty"`
+	Infants  int `json:"infants,omitempty"`
+}
+
 // SearchParams je isti oblik zahteva koji prima supplier-layer /search endpoint.
 type SearchParams struct {
-	Origin        string `json:"origin"`
-	Destination   string `json:"destination"`
-	DepartureDate string `json:"departureDate"`
-	ReturnDate    string `json:"returnDate,omitempty"`
+	Origin        string     `json:"origin"`
+	Destination   string     `json:"destination"`
+	DepartureDate string     `json:"departureDate"`
+	ReturnDate    string     `json:"returnDate,omitempty"`
+	Passengers    Passengers `json:"passengers"`
 }
 
 // FlightSegment i PriceBreakdown prate polja koja su nam potrebna za de-dup i

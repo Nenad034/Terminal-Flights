@@ -109,11 +109,12 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   podaci o ponašanju korisnika.
 - **pricing**: i dalje F0 — predictive pricing model dolazi kasnije u F4, kad
   data warehouse ima dovoljno istorije.
-- **web**: search forma prikazuje ponude (dobavljač, segmenti, cena), klik na
-  ponudu otvara minimalnu formu za jednog putnika i šalje rezervaciju preko
-  novog `/api/booking` BFF proxy-ja ka booking servisu. I dalje F1 skeleton —
-  bez UI-ja za višeputnički checkout, plaćanje karticom (customer-facing PSP
-  još ne postoji, §07) ili manage-booking.
+- **web**: search forma ima broj putnika (1-9), prikazuje ponude, klik na
+  ponudu otvara formu po jedan blok za svakog putnika i šalje rezervaciju
+  preko `/api/booking` BFF proxy-ja. I dalje F1 skeleton — bez plaćanja
+  karticom (customer-facing PSP još ne postoji, §07). Sedište (ancillaries)
+  je namerno ograničeno na rezervacije sa 1 putnikom dok se ne doda
+  mapiranje sedišta po putniku (Duffel `passenger_id` iz seat map-e).
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").
