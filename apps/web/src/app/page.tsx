@@ -1,3 +1,4 @@
+import { OrderLookup } from "@/components/OrderLookup";
 import { SearchForm } from "@/components/SearchForm";
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
         </p>
       </div>
       <SearchForm />
+      <OrderLookup />
     </main>
   );
 }

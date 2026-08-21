@@ -88,6 +88,11 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   potvrđuje (nepovratno kod dobavljača) i upisuje reverzni ledger zapis. Isti
   obrazac je izložen kroz web BFF (`/api/booking/[orderId]/cancellation-*`) i
   UI (dugme "Otkaži rezervaciju" nakon uspešne rezervacije).
+- **manage booking (§12 self-service)**: `GET /orders/:orderId` (samo čitanje
+  iz naše baze, ne pita dobavljača uživo — to je §08 TODO). Web stranica
+  `/booking/[orderId]` prikazuje status i nudi isti quote→confirm cancel tok;
+  početna strana ima lookup formu (unos order ID-a), a uspešna rezervacija
+  nudi link ka toj stranici za kasniji pregled.
 - **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
   + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
   presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni

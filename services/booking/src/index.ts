@@ -1,5 +1,6 @@
 import express from "express";
 import { confirmCancellation, quoteCancellation } from "./cancel.js";
+import { getOrder } from "./queries.js";
 import { startBookingSaga } from "./saga.js";
 
 const PORT = process.env.BOOKING_PORT ?? 4002;
@@ -19,6 +20,17 @@ app.post("/orders", async (req, res) => {
     res.status(201).json({ order });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Manage booking (§12 Self-service manage-booking): pregled postojeće
+// rezervacije. Čita samo iz naše baze, ne pita dobavljača uživo (§08 TODO).
+app.get("/orders/:orderId", async (req, res) => {
+  try {
+    const order = await getOrder(req.params.orderId);
+    res.json({ order });
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
   }
 });
 

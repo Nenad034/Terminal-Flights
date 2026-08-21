@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 
 interface FlightSegment {
@@ -292,6 +293,9 @@ export function SearchForm() {
                 {confirmMutation.data?.status ?? bookMutation.data.status}
                 {bookMutation.data.supplierOrderRef && ` (PNR: ${bookMutation.data.supplierOrderRef})`}
               </p>
+              <Link href={`/booking/${bookMutation.data.orderId}`} className="text-slate-400 underline">
+                Sačuvaj link za kasniji pregled rezervacije
+              </Link>
 
               {confirmMutation.isSuccess ? (
                 <p className="text-slate-300">Rezervacija otkazana.</p>
