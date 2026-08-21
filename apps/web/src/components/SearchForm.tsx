@@ -38,6 +38,13 @@ interface BookedOrder {
   supplierOrderRef?: string;
 }
 
+interface CancellationQuote {
+  supplierCancellationRef: string;
+  refundAmount: number;
+  refundCurrency: string;
+  expiresAt: string;
+}
+
 async function searchFlights(params: {
   origin: string;
   destination: string;
@@ -71,6 +78,24 @@ async function bookOffer(offer: SearchOffer, passenger: Passenger) {
   return data.order!;
 }
 
+async function quoteCancellation(orderId: string) {
+  const res = await fetch(`/api/booking/${orderId}/cancellation-quote`, { method: "POST" });
+  const data = (await res.json()) as { quote?: CancellationQuote; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Cancellation quote failed");
+  return data.quote!;
+}
+
+async function confirmCancellation(orderId: string, supplierCancellationRef: string) {
+  const res = await fetch(`/api/booking/${orderId}/cancellation-confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ supplierCancellationRef }),
+  });
+  const data = (await res.json()) as { order?: BookedOrder; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Cancellation confirm failed");
+  return data.order!;
+}
+
 const emptyPassenger: Passenger = {
   givenName: "",
   familyName: "",
@@ -93,6 +118,12 @@ export function SearchForm() {
   const searchMutation = useMutation({ mutationFn: searchFlights });
   const bookMutation = useMutation({
     mutationFn: (p: Passenger) => bookOffer(selectedOffer!, p),
+  });
+  const quoteMutation = useMutation({
+    mutationFn: (orderId: string) => quoteCancellation(orderId),
+  });
+  const confirmMutation = useMutation({
+    mutationFn: (ref: string) => confirmCancellation(bookMutation.data!.orderId, ref),
   });
 
   return (
@@ -255,10 +286,54 @@ export function SearchForm() {
             <p className="text-sm text-red-400">{(bookMutation.error as Error).message}</p>
           )}
           {bookMutation.isSuccess && (
-            <p className="text-sm text-emerald-400">
-              Order {bookMutation.data.orderId} → status: {bookMutation.data.status}
-              {bookMutation.data.supplierOrderRef && ` (PNR: ${bookMutation.data.supplierOrderRef})`}
-            </p>
+            <div className="space-y-2 text-sm text-emerald-400">
+              <p>
+                Order {bookMutation.data.orderId} → status:{" "}
+                {confirmMutation.data?.status ?? bookMutation.data.status}
+                {bookMutation.data.supplierOrderRef && ` (PNR: ${bookMutation.data.supplierOrderRef})`}
+              </p>
+
+              {confirmMutation.isSuccess ? (
+                <p className="text-slate-300">Rezervacija otkazana.</p>
+              ) : (
+                <div className="space-y-2">
+                  {!quoteMutation.data && (
+                    <button
+                      type="button"
+                      className="rounded-md border border-red-500 px-3 py-1.5 text-red-400 transition hover:bg-red-950/40 disabled:opacity-50"
+                      disabled={quoteMutation.isPending}
+                      onClick={() => quoteMutation.mutate(bookMutation.data.orderId)}
+                    >
+                      {quoteMutation.isPending ? "Proveravam uslove..." : "Otkaži rezervaciju"}
+                    </button>
+                  )}
+
+                  {quoteMutation.isError && (
+                    <p className="text-red-400">{(quoteMutation.error as Error).message}</p>
+                  )}
+
+                  {quoteMutation.isSuccess && (
+                    <div className="space-y-2 rounded-md border border-slate-800 p-3 text-slate-300">
+                      <p>
+                        Refund: {quoteMutation.data.refundAmount} {quoteMutation.data.refundCurrency} (kotacija
+                        važi do {quoteMutation.data.expiresAt})
+                      </p>
+                      <button
+                        type="button"
+                        className="rounded-md bg-red-600 px-3 py-1.5 font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+                        disabled={confirmMutation.isPending}
+                        onClick={() => confirmMutation.mutate(quoteMutation.data.supplierCancellationRef)}
+                      >
+                        {confirmMutation.isPending ? "Otkazujem..." : "Potvrdi otkazivanje"}
+                      </button>
+                      {confirmMutation.isError && (
+                        <p className="text-red-400">{(confirmMutation.error as Error).message}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </form>
       )}

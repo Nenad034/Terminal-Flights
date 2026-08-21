@@ -82,6 +82,12 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   rezervacije, `failed` ako rezervacija nikad nije uspela. Eksplicitan
   ticketing korak za GDS dobavljače ostaje `TODO (F1 nastavak)` — Duffel
   izdaje tiket automatski nakon plaćanja.
+- **otkazivanje (§08 Post-sale)**: dvostepeno — `POST
+  /orders/:orderId/cancellation-quote` traži kotaciju (koliko se refundira,
+  bez ikakve nepovratne akcije), `POST /orders/:orderId/cancellation-confirm`
+  potvrđuje (nepovratno kod dobavljača) i upisuje reverzni ledger zapis. Isti
+  obrazac je izložen kroz web BFF (`/api/booking/[orderId]/cancellation-*`) i
+  UI (dugme "Otkaži rezervaciju" nakon uspešne rezervacije).
 - **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
   + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
   presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni

@@ -85,6 +85,55 @@ app.post("/orders/:supplierOrderRef/pay", async (req, res) => {
   }
 });
 
+// Booking saga (§05/§08 Post-sale) traži kotaciju otkazivanja — koliko će se
+// refundirati — pre nego što korisnik potvrdi. 501 ako adapter ne podržava
+// otkazivanje (isti obrazac kao gore).
+app.post("/orders/:supplierOrderRef/cancellation-quote", async (req, res) => {
+  const { supplierOrderRef } = req.params;
+  const { supplierCode, orderId } = req.body;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.quoteCancellation) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support cancellation yet` });
+    return;
+  }
+
+  try {
+    const quote = await adapter.quoteCancellation(orderId, supplierOrderRef);
+    res.json({ quote });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// Potvrđuje prethodno dobijenu kotaciju otkazivanja — ovo je nepovratan
+// korak kod dobavljača (refund se pokreće).
+app.post("/order-cancellations/:supplierCancellationRef/confirm", async (req, res) => {
+  const { supplierCancellationRef } = req.params;
+  const { supplierCode } = req.body;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.confirmCancellation) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support cancellation yet` });
+    return;
+  }
+
+  try {
+    await adapter.confirmCancellation(supplierCancellationRef);
+    res.json({ confirmed: true });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[supplier-layer] listening on :${PORT}`);
 });
