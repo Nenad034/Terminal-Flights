@@ -1,6 +1,7 @@
 import type { FareRules, FlightSegment, Offer, Order } from "@terminal-flights/shared-types";
 import type { AncillaryOption, CancelQuote, CreateOrderParams, SearchParams, SupplierAdapter } from "./adapter.js";
 import type {
+  DuffelComponentClientKeyResponse,
   DuffelOffer,
   DuffelOfferRequestResponse,
   DuffelOrderCancellationResponse,
@@ -181,16 +182,45 @@ export class DuffelAdapter implements SupplierAdapter {
   }
 
   /**
-   * Kreira order kao "hold" (bez odmah izvršenog plaćanja) — plaćanje ide kroz
-   * poseban payments korak u booking sagi (§05), koji poziva
-   * POST /air/payments nakon što ovaj order postoji. To booking sagi daje
-   * mesto da uradi QC/validacioni korak (cena/dostupnost/pravila i dalje važe)
-   * pre nego što se novac stvarno pokrene.
+   * Generiše "component client key" (§07) — server-side korak koji ovlašćuje
+   * Duffel-ovu client-side komponentu za kartice (npr. DuffelCardForm iz
+   * @duffel/components, još neintegrisano na frontendu — videti README) da
+   * sigurno tokenizuje karticu. Bez tela zahteva; potvrđeno iz zvanične
+   * dokumentacije (POST /identity/component_client_keys → data.component_client_key).
+   */
+  async createCardPaymentSession(): Promise<string> {
+    const res = await fetch(`${this.apiBase}/identity/component_client_keys`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Duffel-Version": "v2",
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!res.ok) {
+      throw new Error(`[duffel] component client key creation failed: ${res.status} ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as DuffelComponentClientKeyResponse;
+    return json.data.component_client_key;
+  }
+
+  /**
+   * Kreira order. Dva moda:
+   * - `cardPayment` prisutno: order je "instant" i plaća se odmah karticom
+   *   korisnika preko `three_d_secure_session_id` (§07, Duffel MoR) — nema
+   *   posebnog payOrder() koraka posle ovoga, saga to prepoznaje po statusu.
+   * - `cardPayment` odsutno: order je "hold" (nenaplaćen), plaćanje ide kroz
+   *   poseban payOrder() poziv (balance tok, §07) — koristan bez korisničke
+   *   kartice.
    */
   async createOrder(params: CreateOrderParams): Promise<Order> {
     const body = {
       data: {
-        type: "hold",
+        type: params.cardPayment ? "instant" : "hold",
         selected_offers: [params.supplierOfferRef],
         passengers: params.passengers.map((p) => ({
           given_name: p.givenName,
@@ -208,6 +238,18 @@ export class DuffelAdapter implements SupplierAdapter {
         // 422 validation error, ne tiho pogrešnu rezervaciju.
         ...(params.serviceIds && params.serviceIds.length > 0
           ? { services: params.serviceIds.map((id) => ({ id, quantity: 1 })) }
+          : {}),
+        ...(params.cardPayment
+          ? {
+              payments: [
+                {
+                  type: "card",
+                  currency: params.cardPayment.currency,
+                  amount: params.cardPayment.amount.toFixed(2),
+                  three_d_secure_session_id: params.cardPayment.threeDSecureSessionId,
+                },
+              ],
+            }
           : {}),
       },
     };

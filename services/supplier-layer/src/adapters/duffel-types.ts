@@ -71,6 +71,15 @@ export interface DuffelOrderResponse {
   data: DuffelOrder;
 }
 
+// Component Client Keys API — POST /identity/component_client_keys
+// https://duffel.com/docs/api/v2/component-client-keys — potvrđeno iz
+// dokumentacije: metoda, putanja i naziv polja u odgovoru.
+export interface DuffelComponentClientKeyResponse {
+  data: {
+    component_client_key: string;
+  };
+}
+
 // Payments API — https://duffel.com/docs/api/payments/create-payment
 export interface DuffelPaymentResponse {
   data: {

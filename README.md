@@ -68,8 +68,9 @@ Zaustavi infra: `pnpm infra:down`.
 Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
 
 - **supplier-layer**: Duffel adapter potpuno implementiran (search, order
-  creation, payment preko Duffel balance-a jer je Duffel merchant of record
-  §07, dvofazno cancellation). Amadeus, Sabre, Travelport, Travelfusion su
+  creation u dva moda — plaćanje karticom korisnika pri kreiranju, §07, ili
+  "hold" + odvojeno plaćanje preko Duffel balance-a — dvofazno cancellation).
+  Amadeus, Sabre, Travelport, Travelfusion su
   registrovani u agregatoru kao stub-ovi (`search()` vraća `[]`) dok se ne
   obezbedi komercijalni/sertifikacioni pristup — videti komentare u svakom
   `src/adapters/*.ts` fajlu za tačan status i šta nedostaje.
@@ -103,6 +104,25 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   izabranog sedišta na order) nije nezavisno potvrđen iz dokumentacije —
   izveden je iz opšte konvencije, treba proveriti u sandbox-u pre produkcije
   (vidi komentar u `duffel.ts`).
+- **naplata od korisnika (§07)**: arhitektura eksplicitno kaže da je Duffel
+  merchant of record i sam skida sredstva sa korisnika — nema potrebe za
+  sopstvenim PSP-om (Stripe/Adyen) dok ne postoji aktivan GDS dobavljač gde bi
+  *mi* bili MoR. Server-side deo je gotov: `POST /payment-sessions` generiše
+  Duffel "component client key" (`identity/component_client_keys`), a
+  `createOrder` pravi order kao `type: "instant"` sa `payments: [{type:
+  "card", ..., three_d_secure_session_id}]` kad je kartica priložena —
+  booking saga prepoznaje da je takav order već plaćen i preskače odvojeni
+  balance korak. **Frontend deo NIJE implementiran** — Duffel-ova client-side
+  komponenta za kartice (`@duffel/components`, `DuffelCardForm`,
+  `createCardForTemporaryUse()`, `createThreeDSecureSession()`) ima
+  imperativni API čiji tačan oblik nisam mogao pouzdano da potvrdim iz
+  dokumentacije (nema pristupa paketu/tipovima), pa nisam pisao pogađanu
+  integraciju. Sledeći korak: instalirati `@duffel/components` u `apps/web`,
+  pratiti https://duffel.com/docs/guides/card-form-component-with-3dsecure
+  i https://duffel.com/docs/guides/collecting-customer-card-payments, uzeti
+  `componentClientKey` sa `/api/payment-sessions` (BFF proxy još ne postoji,
+  treba dodati), prikazati `DuffelCardForm`, dobiti `three_d_secure_session_id`
+  i poslati ga kao `cardPayment.threeDSecureSessionId` u booking zahtevu.
 - **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
   + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
   presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni

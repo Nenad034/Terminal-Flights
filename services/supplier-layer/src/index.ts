@@ -58,6 +58,29 @@ app.get("/offers/:supplierOfferRef/ancillaries", async (req, res) => {
   }
 });
 
+// Web klijent (§07) traži ovo pre nego što prikaže formu za karticu —
+// ključ koji ovlašćuje Duffel-ovu client-side komponentu za kartice.
+app.post("/payment-sessions", async (req, res) => {
+  const { supplierCode } = req.body;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.createCardPaymentSession) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support card payment sessions yet` });
+    return;
+  }
+
+  try {
+    const componentClientKey = await adapter.createCardPaymentSession();
+    res.json({ componentClientKey });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 // Booking saga (§05) poziva ovo da napravi order kod konkretnog dobavljača.
 // 501 ako adapter za taj supplierCode ne podržava createOrder (npr. jer nije
 // još sertifikovan — Amadeus/Sabre/Travelport/Travelfusion stub-ovi, §03).

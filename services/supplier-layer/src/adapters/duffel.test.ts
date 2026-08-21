@@ -105,6 +105,27 @@ describe("DuffelAdapter.search", () => {
   });
 });
 
+describe("DuffelAdapter.createCardPaymentSession", () => {
+  it("returns the component client key from the response", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({ data: { component_client_key: "cck_test_123" } })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    const key = await adapter.createCardPaymentSession();
+
+    expect(key).toBe("cck_test_123");
+    const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toContain("/identity/component_client_keys");
+  });
+
+  it("throws on failure", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse({ errors: [] }, false, 401));
+    const adapter = new DuffelAdapter("test_key");
+    await expect(adapter.createCardPaymentSession()).rejects.toThrow(/component client key creation failed/);
+  });
+});
+
 describe("DuffelAdapter.getAncillaries", () => {
   it("returns [] without calling the API when no key is configured", async () => {
     const adapter = new DuffelAdapter("");
@@ -167,6 +188,38 @@ describe("DuffelAdapter.getAncillaries", () => {
 });
 
 describe("DuffelAdapter.createOrder", () => {
+  it("creates an instant order with a card payment when cardPayment is provided", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "ord_1",
+          booking_reference: "ABC123",
+          total_amount: "199.99",
+          total_currency: "EUR",
+          payment_status: { awaiting_payment: false, payment_required_by: null, price_guarantee_expires_at: null },
+          documents: [{ type: "electronic_ticket", unique_identifier: "1234567890" }],
+        },
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    const order = await adapter.createOrder({
+      offerId: "duffel:off_1",
+      supplierOfferRef: "off_1",
+      passengers: [],
+      cardPayment: { threeDSecureSessionId: "3ds_1", amount: 199.99, currency: "EUR" },
+    });
+
+    expect(order.status).toBe("ticketed"); // already paid + ticketed in one call
+
+    const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.data.type).toBe("instant");
+    expect(body.data.payments).toEqual([
+      { type: "card", currency: "EUR", amount: "199.99", three_d_secure_session_id: "3ds_1" },
+    ]);
+  });
+
   it("creates a hold order and derives status from payment_status/documents", async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse({

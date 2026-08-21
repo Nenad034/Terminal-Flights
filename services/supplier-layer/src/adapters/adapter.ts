@@ -19,12 +19,28 @@ export interface PassengerDetails {
   phoneNumber: string;
 }
 
+export interface CardPayment {
+  threeDSecureSessionId: string;
+  amount: number;
+  currency: string;
+}
+
 export interface CreateOrderParams {
   offerId: string;
   supplierOfferRef: string;
   passengers: PassengerDetails[];
   /** ID-jevi ancillary usluga (npr. sedišta) iz getAncillaries(), §07. */
   serviceIds?: string[];
+  /**
+   * Kad je prisutno, order se plaća direktno karticom korisnika pri
+   * kreiranju (§07 — Duffel je merchant of record). threeDSecureSessionId
+   * dolazi sa klijenta, iz Duffel-ove komponente za kartice (PCI-compliant,
+   * broj kartice nikad ne prolazi kroz naš server). Bez ovoga, order se
+   * pravi kao "hold" i plaća se odvojeno preko payOrder() — §07 balance tok,
+   * koristan za scenarije bez korisničke kartice (npr. buduće GDS
+   * dobavljače gde smo mi merchant of record).
+   */
+  cardPayment?: CardPayment;
 }
 
 export interface CancelQuote {
@@ -60,6 +76,13 @@ export interface SupplierAdapter {
    * neistražen deo API-ja — namerno nije uveden dok se ne proveri).
    */
   getAncillaries?(supplierOfferRef: string): Promise<AncillaryOption[]>;
+  /**
+   * Server-side korak pre nego što klijent prikaže formu za karticu (§07):
+   * generiše kratkoročan ključ koji ovlašćuje Duffel-ovu client-side
+   * komponentu za kartice da sigurno tokenizuje broj kartice, bez da on ikad
+   * dođe do našeg servera. Vraća "component client key".
+   */
+  createCardPaymentSession?(): Promise<string>;
   createOrder?(params: CreateOrderParams): Promise<Order>;
   /**
    * Plaćanje "hold" order-a. Kod dobavljača koji su merchant of record

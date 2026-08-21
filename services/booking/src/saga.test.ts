@@ -105,6 +105,69 @@ describe("startBookingSaga", () => {
     expect(compensationCall[1]).toEqual(["pending", "ord_ref_1", "order-1"]);
   });
 
+  it("skips the separate payment step when the order was already paid via card at creation", async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        order: {
+          orderId: "duf_1",
+          supplierOrderRef: "ord_ref_1",
+          status: "ticketed",
+          price: { currency: "EUR", base: 0, taxes: 0, total: 100 },
+        },
+      }),
+    });
+
+    queryMock
+      .mockResolvedValueOnce({ rows: [insertRow()] }) // INSERT pending
+      .mockResolvedValueOnce({ rows: [{ updated_at: "t1" }] }) // UPDATE status/supplier_order_ref
+      .mockResolvedValueOnce({ rows: [] }); // INSERT ledger_entries
+
+    const order = await startBookingSaga({
+      ...baseReq,
+      expiresAt: future,
+      cardPayment: { threeDSecureSessionId: "3ds_1" },
+    });
+
+    expect(order.status).toBe("ticketed");
+    expect(fetch).toHaveBeenCalledTimes(1); // only reserveWithSupplier, no separate /pay call
+
+    const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.cardPayment).toEqual({ threeDSecureSessionId: "3ds_1", amount: 100, currency: "EUR" });
+  });
+
+  it("preserves the already-paid status on compensation if a later step fails after card payment succeeded", async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        order: {
+          orderId: "duf_1",
+          supplierOrderRef: "ord_ref_1",
+          status: "ticketed",
+          price: { currency: "EUR", base: 0, taxes: 0, total: 100 },
+        },
+      }),
+    });
+
+    queryMock
+      .mockResolvedValueOnce({ rows: [insertRow()] }) // INSERT pending
+      .mockResolvedValueOnce({ rows: [{ updated_at: "t1" }] }) // UPDATE status/supplier_order_ref
+      .mockRejectedValueOnce(new Error("ledger db unavailable")) // INSERT ledger_entries fails
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE compensation
+
+    await expect(
+      startBookingSaga({ ...baseReq, expiresAt: future, cardPayment: { threeDSecureSessionId: "3ds_1" } })
+    ).rejects.toThrow(/ledger db unavailable/);
+
+    const compensationCall = queryMock.mock.calls[3];
+    // Bug this guards against: without tracking `paid` separately, this would
+    // wrongly downgrade an already-ticketed, already-paid order to "pending".
+    expect(compensationCall[1]).toEqual(["ticketed", "ord_ref_1", "order-1"]);
+  });
+
   it("marks the order failed if the supplier reservation itself never succeeds", async () => {
     const future = new Date(Date.now() + 60_000).toISOString();
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

@@ -22,17 +22,28 @@ export interface BookingRequest {
   totalAmount: number; // mora uključivati cenu izabranih ancillary usluga (§07) — obaveza klijenta koji šalje zahtev
   passengers: BookingPassenger[];
   serviceIds?: string[];
+  /**
+   * Prisutno kad je korisnik uneo karticu na frontendu (§07, Duffel MoR) —
+   * order se tada pravi i plaća u istom pozivu (createOrder), pa saga
+   * preskače poseban payWithSupplier() korak. Frontend za sad ne šalje ovo
+   * (Duffel-ova client-side komponenta za kartice još nije integrisana —
+   * videti README); dok je odsutno, order se pravi kao "hold" i plaća
+   * odvojeno preko Duffel balance-a.
+   */
+  cardPayment?: { threeDSecureSessionId: string };
 }
 
 /**
- * Booking saga (§05): QC provera → rezerviši kod dobavljača → plati → upiši
- * u ledger (Duffel izdaje tiket automatski nakon plaćanja). Ako bilo koji
- * korak padne, prethodni se kompenzuju (order ostaje "held" na manuelni
- * review, ne pokušavamo automatski void/refund dok ne znamo uzrok pada).
+ * Booking saga (§05): QC provera → rezerviši kod dobavljača (plaćanje je
+ * ili već izvršeno u tom koraku — kartica, §07 — ili sledi poseban korak
+ * preko balance-a) → upiši u ledger (Duffel izdaje tiket automatski nakon
+ * plaćanja). Ako bilo koji korak padne, prethodni se kompenzuju (order
+ * ostaje "held" na manuelni review, ne pokušavamo automatski void/refund
+ * dok ne znamo uzrok pada).
  *
- * F1: QC, supplier reservation, payment i minimalni ledger upis su
- * implementirani. Eksplicitan ticketing korak za GDS dobavljače (gde nije
- * automatski kao kod Duffel-a) ostaje TODO dok ti adapteri nisu aktivni.
+ * F1: QC, supplier reservation, payment (oba moda) i minimalni ledger upis
+ * su implementirani. Eksplicitan ticketing korak za GDS dobavljače (gde
+ * nije automatski kao kod Duffel-a) ostaje TODO dok ti adapteri nisu aktivni.
  */
 export async function startBookingSaga(req: BookingRequest): Promise<Order> {
   const { rows } = await pool.query<{
@@ -49,10 +60,13 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
   const row = rows[0];
 
   let reserved: Order | undefined;
+  let paid: Order | undefined;
   try {
     assertOfferStillValid(req);
     reserved = await reserveWithSupplier(req);
-    const paid = await payWithSupplier(req, reserved);
+    // Kad je order napravljen sa cardPayment, plaćanje se već desilo u istom
+    // pozivu — reserved.status neće biti "pending" (videti DuffelAdapter.toOrder).
+    paid = reserved.status === "pending" ? await payWithSupplier(req, reserved) : reserved;
 
     const { rows: updated } = await pool.query<{ updated_at: string }>(
       `UPDATE orders SET status = $1, supplier_order_ref = $2, updated_at = now()
@@ -74,13 +88,18 @@ export async function startBookingSaga(req: BookingRequest): Promise<Order> {
       updatedAt: updated[0].updated_at,
     };
   } catch (err) {
-    // Kompenzacija: ako je rezervacija kod dobavljača uspela ali je plaćanje
-    // palo, order ostaje "held" kod dobavljača (nije naš problem da ga
-    // otkažemo automatski dok ne znamo zašto je palo — ostaje za manuelni
-    // review). Ako rezervacija nikad nije ni uspela, nema šta da se poništi.
+    // Kompenzacija: ako je plaćanje već uspelo (paid postavljeno) pre nego
+    // što je nešto posle njega palo (npr. upis u ledger), order NIJE "held
+    // neplaćen" — to je zapisano stanje kod dobavljača i status treba da to
+    // odražava, ne da se tiho vrati na "pending". Ako je samo rezervacija
+    // uspela pa je plaćanje palo, order ostaje "held" kod dobavljača (nije
+    // naš problem da ga otkažemo automatski dok ne znamo zašto je palo —
+    // ostaje za manuelni review). Ako rezervacija nikad nije ni uspela,
+    // nema šta da se poništi.
+    const status = paid ? paid.status : reserved ? "pending" : "failed";
     await pool.query(
       `UPDATE orders SET status = $1, supplier_order_ref = $2, updated_at = now() WHERE order_id = $3`,
-      [reserved ? "pending" : "failed", reserved?.supplierOrderRef ?? null, row.order_id]
+      [status, paid?.supplierOrderRef ?? reserved?.supplierOrderRef ?? null, row.order_id]
     );
     throw err;
   }
@@ -128,6 +147,9 @@ async function reserveWithSupplier(req: BookingRequest): Promise<Order> {
       supplierOfferRef: req.supplierOfferRef,
       passengers: req.passengers,
       serviceIds: req.serviceIds,
+      cardPayment: req.cardPayment
+        ? { threeDSecureSessionId: req.cardPayment.threeDSecureSessionId, amount: req.totalAmount, currency: req.currency }
+        : undefined,
     }),
   });
 
