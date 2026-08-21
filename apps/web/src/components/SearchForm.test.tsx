@@ -48,15 +48,25 @@ const offer = {
   segments: [{ marketingCarrier: "AA", flightNumber: "123", departureAt: "2026-09-15T10:00:00Z" }],
   price: { currency: "EUR", total: 199.99 },
   expiresAt: "2099-01-01T00:00:00Z",
+  passengerIds: ["pas_1"],
 };
 
-const seat = { serviceId: "ase_1", type: "seat" as const, label: "12A", price: { currency: "EUR", total: 15 } };
+const twoPassengerOffer = { ...offer, passengerIds: ["pas_1", "pas_2"] };
+
+const seat = {
+  serviceId: "ase_1",
+  type: "seat" as const,
+  label: "12A",
+  price: { currency: "EUR", total: 15 },
+  passengerIds: ["pas_1"],
+};
 const bag = {
   serviceId: "ase_bag_1",
   type: "baggage" as const,
   label: "Dodatni prtljag",
   price: { currency: "EUR", total: 20 },
   maxQuantity: 3,
+  passengerIds: ["pas_1"],
 };
 
 function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 400) {
@@ -153,10 +163,10 @@ describe("SearchForm", () => {
     expect(await screen.findByText(/12A/)).toBeInTheDocument();
   });
 
-  it("hides seat selection when there is more than one passenger, even if seats are available", async () => {
+  it("shows the seat option only for the passenger it's scoped to, not passengers without a matching Duffel ID", async () => {
     mockFetch({
       ...noCardPayment,
-      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/search": () => jsonResponse({ offers: [twoPassengerOffer] }),
       "/api/ancillaries": () => jsonResponse({ options: [seat] }),
     });
     const user = userEvent.setup();
@@ -166,9 +176,9 @@ describe("SearchForm", () => {
     await searchAndSelectOffer(user);
 
     expect(screen.getAllByPlaceholderText("Ime")).toHaveLength(2);
-    // Give the ancillaries query a chance to resolve before asserting absence.
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/api/ancillaries"), expect.anything()));
-    expect(screen.queryByText(/12A/)).not.toBeInTheDocument();
+    // 12A is scoped to pas_1 only (seat.passengerIds), so it shows up once
+    // (for passenger 1), not twice — passenger 2 (pas_2) has no matching option.
+    expect(await screen.findAllByText(/12A/)).toHaveLength(1);
   });
 
   it("submits a booking with all passengers and the selected seat's serviceId", async () => {
@@ -318,8 +328,8 @@ describe("SearchForm", () => {
     await searchAndSelectOffer(user);
     await screen.findByText(/Dodatni prtljag/);
 
-    await user.click(screen.getByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" }));
-    await user.click(screen.getByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" }));
+    await user.click(screen.getByRole("button", { name: "Dodaj prtljag za putnika 1 (Dodatni prtljag)" }));
+    await user.click(screen.getByRole("button", { name: "Dodaj prtljag za putnika 1 (Dodatni prtljag)" }));
 
     expect(await screen.findByText(new RegExp(`Rezervacija za ${offer.price.total + 2 * bag.price.total}`))).toBeInTheDocument();
 
@@ -344,9 +354,37 @@ describe("SearchForm", () => {
     renderWithQueryClient(<SearchForm />);
 
     await searchAndSelectOffer(user);
-    const addButton = await screen.findByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" });
+    const addButton = await screen.findByRole("button", { name: "Dodaj prtljag za putnika 1 (Dodatni prtljag)" });
 
     await user.click(addButton);
     expect(addButton).toBeDisabled();
+  });
+
+  it("books a separate seat for each passenger when both have a Duffel-scoped option", async () => {
+    const seatForPassenger2 = { ...seat, serviceId: "ase_2", label: "14C", passengerIds: ["pas_2"] };
+    mockFetch({
+      ...noCardPayment,
+      "/api/search": () => jsonResponse({ offers: [twoPassengerOffer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [seat, seatForPassenger2] }),
+      "/api/booking": () => jsonResponse({ order: { orderId: "order-1", status: "ticketed" } }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    fireEvent.change(screen.getByLabelText("Putnici"), { target: { value: "2" } });
+    await searchAndSelectOffer(user);
+
+    await user.click(await screen.findByRole("button", { name: /12A/ }));
+    await user.click(await screen.findByRole("button", { name: /14C/ }));
+    await fillPassenger(0);
+    await fillPassenger(1);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+
+    expect(await screen.findByText(/Order order-1/)).toBeInTheDocument();
+
+    const bookingCall = (fetch as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[0].includes("/api/booking"));
+    const body = JSON.parse(bookingCall![1].body);
+    expect(body.serviceIds).toEqual(expect.arrayContaining([seat.serviceId, seatForPassenger2.serviceId]));
+    expect(body.totalAmount).toBe(twoPassengerOffer.price.total + seat.price.total + seatForPassenger2.price.total);
   });
 });

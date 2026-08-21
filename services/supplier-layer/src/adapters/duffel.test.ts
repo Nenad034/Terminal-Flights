@@ -103,6 +103,36 @@ describe("DuffelAdapter.search", () => {
     const adapter = new DuffelAdapter("test_key");
     await expect(adapter.search(searchParams)).resolves.toEqual([]);
   });
+
+  it("maps the offer's passengers into passengerIds, preserving order (§07 — used to match ancillaries per passenger)", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "orq_1",
+          offers: [
+            {
+              id: "off_1",
+              total_amount: "199.99",
+              total_currency: "EUR",
+              base_amount: "150.00",
+              tax_amount: "49.99",
+              expires_at: "2099-01-01T00:00:00Z",
+              slices: [],
+              passengers: [
+                { id: "pas_1", type: "adult" },
+                { id: "pas_2", type: "adult" },
+              ],
+            },
+          ],
+        },
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    const [offer] = await adapter.search(searchParams);
+
+    expect(offer.passengerIds).toEqual(["pas_1", "pas_2"]);
+  });
 });
 
 describe("DuffelAdapter.createCardPaymentSession", () => {
@@ -181,7 +211,9 @@ describe("DuffelAdapter.getAncillaries", () => {
     const adapter = new DuffelAdapter("test_key");
     const options = await adapter.getAncillaries("off_1");
 
-    expect(options).toEqual([{ serviceId: "ase_1", type: "seat", label: "12A", price: { currency: "EUR", total: 15 } }]);
+    expect(options).toEqual([
+      { serviceId: "ase_1", type: "seat", label: "12A", price: { currency: "EUR", total: 15 }, passengerIds: ["pas_1"] },
+    ]);
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/air/seat_maps?offer_id=off_1"),
       expect.any(Object)
@@ -213,7 +245,14 @@ describe("DuffelAdapter.getAncillaries", () => {
     const options = await adapter.getAncillaries("off_1");
 
     expect(options).toEqual([
-      { serviceId: "ase_bag_1", type: "baggage", label: "Dodatni prtljag", price: { currency: "EUR", total: 20 }, maxQuantity: 2 },
+      {
+        serviceId: "ase_bag_1",
+        type: "baggage",
+        label: "Dodatni prtljag",
+        price: { currency: "EUR", total: 20 },
+        maxQuantity: 2,
+        passengerIds: ["pas_1"],
+      },
     ]);
   });
 
@@ -243,7 +282,14 @@ describe("DuffelAdapter.getAncillaries", () => {
     const options = await adapter.getAncillaries("off_1");
 
     expect(options).toEqual([
-      { serviceId: "ase_bag_1", type: "baggage", label: "Dodatni prtljag", price: { currency: "EUR", total: 20 }, maxQuantity: 3 },
+      {
+        serviceId: "ase_bag_1",
+        type: "baggage",
+        label: "Dodatni prtljag",
+        price: { currency: "EUR", total: 20 },
+        maxQuantity: 3,
+        passengerIds: [],
+      },
     ]);
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/air/offers/off_1?return_available_services=true"),

@@ -111,6 +111,7 @@ export class DuffelAdapter implements SupplierAdapter {
       },
       fareRules,
       expiresAt: offer.expires_at,
+      passengerIds: offer.passengers?.map((p) => p.id),
     };
   }
 
@@ -186,6 +187,7 @@ export class DuffelAdapter implements SupplierAdapter {
                   type: "seat",
                   label: element.designator,
                   price: { currency: service.total_currency, total: Number(service.total_amount) },
+                  passengerIds: [service.passenger_id],
                 });
               }
             }
@@ -223,6 +225,7 @@ export class DuffelAdapter implements SupplierAdapter {
         label: "Dodatni prtljag",
         price: { currency: service.total_currency, total: Number(service.total_amount) },
         maxQuantity: service.maximum_quantity,
+        passengerIds: service.passenger_ids,
       }));
   }
 

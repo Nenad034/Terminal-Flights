@@ -61,6 +61,11 @@ type Offer struct {
 	Segments         []FlightSegment `json:"segments"`
 	Price            PriceBreakdown  `json:"price"`
 	ExpiresAt        string          `json:"expiresAt"`
+	// Dobavljačevi interni ID-jevi putnika (§07 Ancillaries) — mora ostati
+	// ovde eksplicitno, inače Go-ovo decode→re-encode tiho odbacuje polje
+	// koje ne postoji u struct-u (ista klasa bagova kao SupplierOfferRef i
+	// Passengers ranije — videti napomene uz njih).
+	PassengerIds []string `json:"passengerIds,omitempty"`
 }
 
 type SearchResult struct {

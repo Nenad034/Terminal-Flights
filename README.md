@@ -101,13 +101,18 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   /offers/:supplierOfferRef/ancillaries?supplierCode=...` na supplier-layer-u
   vraća oba tipa u jednoj ravnoj listi (`type: "seat" | "baggage"`), izloženo
   kroz `/api/ancillaries` na webu; korisnik bira sedište i količinu prtljaga
-  pre rezervacije, cena se dodaje u `totalAmount`. `POST /air/orders`
-  `services` polje je sad potvrđeno iz dokumentacije (`{id, quantity}`, isti
-  primer se koristi i za prtljag) — ranija napomena o nesigurnosti tog oblika
-  više ne važi za ovaj deo; `metadata` sa težinom/dimenzijama torbe i dalje
-  nije dokumentovan pa nije korišćen. Ancillary izbor je i dalje ograničen na
-  rezervacije sa 1 putnikom (Duffel vezuje i sedišta i prtljag za njihov
-  interni `passenger_id`, koji ne pratimo po našem putniku).
+  po putniku, cena se dodaje u `totalAmount`. `POST /air/orders` `services`
+  polje je sad potvrđeno iz dokumentacije (`{id, quantity}`, isti primer se
+  koristi i za prtljag) — ranija napomena o nesigurnosti tog oblika više ne
+  važi za ovaj deo; `metadata` sa težinom/dimenzijama torbe i dalje nije
+  dokumentovan pa nije korišćen. **Mapiranje po putniku**: Duffel-ova Offer
+  šema nosi svoj `passengers[]` niz (`{id, type}`, potvrđeno iz zvanične
+  dokumentacije) istim redosledom kojim su poslati u search zahtevu — adapter
+  ga izlaže kao `Offer.passengerIds`, a svaka ancillary opcija nosi
+  `AncillaryOption.passengerIds` (od `available_services.passenger_id(s)`).
+  Frontend upoređuje `offer.passengerIds[i]` sa opcijama da prikaže tačno
+  onu sedište/prtljag ponudu koja važi za putnika `i`, umesto jedne deljene
+  liste — ranije ograničenje na rezervacije sa 1 putnikom je uklonjeno.
 - **naplata od korisnika (§07)**: arhitektura eksplicitno kaže da je Duffel
   merchant of record i sam skida sredstva sa korisnika — nema potrebe za
   sopstvenim PSP-om (Stripe/Adyen) dok ne postoji aktivan GDS dobavljač gde bi
@@ -139,10 +144,10 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   data warehouse ima dovoljno istorije.
 - **web**: search forma ima broj putnika (1-9), prikazuje ponude, klik na
   ponudu otvara formu po jedan blok za svakog putnika i šalje rezervaciju
-  preko `/api/booking` BFF proxy-ja. Ima i UI za kartično plaćanje (§07,
-  videti gore). I dalje F1 skeleton. Sedište (ancillaries) je namerno
-  ograničeno na rezervacije sa 1 putnikom dok se ne doda mapiranje sedišta
-  po putniku (Duffel `passenger_id` iz seat map-e).
+  preko `/api/booking` BFF proxy-ja. Svaki putnik-blok ima svoj sedište i
+  prtljag izbor, ispravno mapiran na dobavljačev `passenger_id` (§07, videti
+  gore) — nije više ograničeno na 1 putnika. Ima i UI za kartično plaćanje
+  (§07, videti gore). I dalje F1 skeleton.
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").

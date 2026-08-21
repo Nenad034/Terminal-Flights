@@ -109,3 +109,38 @@ func TestSearch_CallsSupplierLayerAndAppliesDedup(t *testing.T) {
 		t.Errorf("expected cheaper amadeus offer to survive, got %s", result.Offers[0].SupplierCode)
 	}
 }
+
+// Regression test for the "Go struct silently drops unknown JSON fields"
+// bug class (§07 Ancillaries) — PassengerIds must be declared on Offer or
+// it disappears on decode from supplier-layer, exactly like
+// SupplierOfferRef/ExpiresAt did before they were added.
+func TestSearch_PreservesPassengerIds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(SearchResult{
+			Offers: []Offer{
+				{
+					OfferID:      "duffel:1",
+					SupplierCode: "duffel",
+					Segments:     []FlightSegment{segment("AA", "1", "t1")},
+					Price:        PriceBreakdown{Total: 100},
+					PassengerIds: []string{"pas_1", "pas_2"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	orchestrator := New(server.URL)
+	result, err := orchestrator.Search(context.Background(), SearchParams{Passengers: Passengers{Adults: 2}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Offers) != 1 {
+		t.Fatalf("expected 1 offer, got %d", len(result.Offers))
+	}
+	got := result.Offers[0].PassengerIds
+	if len(got) != 2 || got[0] != "pas_1" || got[1] != "pas_2" {
+		t.Errorf("expected passengerIds [pas_1 pas_2] to survive decode, got %v", got)
+	}
+}

@@ -32,6 +32,11 @@ export interface DuffelConditionDetail {
   allowed: boolean;
 }
 
+export interface DuffelOfferPassenger {
+  id: string;
+  type: string;
+}
+
 export interface DuffelOffer {
   id: string;
   total_amount: string;
@@ -44,6 +49,10 @@ export interface DuffelOffer {
     refund_before_departure?: DuffelConditionDetail | null;
     change_before_departure?: DuffelConditionDetail | null;
   };
+  // Putnici sa Duffel-ovim ID-jevima, istim redosledom kojim smo ih poslali
+  // u buildPassengers() (§07 Ancillaries — vezivanje sedišta/prtljaga za
+  // tačnog putnika). Potvrđeno iz zvanične Offers šeme.
+  passengers?: DuffelOfferPassenger[];
 }
 
 export interface DuffelOfferRequestResponse {

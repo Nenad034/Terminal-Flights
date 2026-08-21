@@ -47,6 +47,13 @@ export interface Offer {
   price: PriceBreakdown;
   fareRules: FareRules;
   expiresAt: string; // price-freeze TTL, §04
+  /**
+   * Dobavljačevi interni ID-jevi putnika, istim redosledom kojim su poslati
+   * u search zahtevu (§07 Ancillaries) — koristi se da se sedište/prtljag iz
+   * getAncillaries() ispravno pripiše tačnom putniku iz našeg booking
+   * zahteva (passengers[i] ↔ passengerIds[i]).
+   */
+  passengerIds?: string[];
 }
 
 export type OrderStatus =

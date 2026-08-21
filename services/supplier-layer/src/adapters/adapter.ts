@@ -57,6 +57,12 @@ export interface AncillaryOption {
   price: { currency: string; total: number };
   /** Samo za type "baggage" — Duffel-ovo ograničenje koliko se puta ova usluga može dodati. */
   maxQuantity?: number;
+  /**
+   * Dobavljačevi interni ID-jevi putnika za koje ova usluga važi (§07) —
+   * frontend ih upoređuje sa Offer.passengerIds da prikaže pravu opciju
+   * pravom putniku umesto jedne deljene liste za sve.
+   */
+  passengerIds?: string[];
 }
 
 /**

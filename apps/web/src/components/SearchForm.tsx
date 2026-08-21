@@ -23,6 +23,8 @@ interface SearchOffer {
   segments: FlightSegment[];
   price: PriceBreakdown;
   expiresAt: string;
+  /** Dobavljačevi ID-jevi putnika, istim redosledom kao passengers[] (§07). */
+  passengerIds?: string[];
 }
 
 interface Passenger {
@@ -53,6 +55,21 @@ interface AncillaryOption {
   label: string;
   price: { currency: string; total: number };
   maxQuantity?: number;
+  /** Dobavljačevi ID-jevi putnika za koje ova usluga važi (§07). */
+  passengerIds?: string[];
+}
+
+// Ancillary opcije su vezane za dobavljačev interni passenger_id (§07) —
+// ova funkcija ih filtrira na one koje važe za konkretnog putnika iz našeg
+// passengers[] niza, poredeći sa offer.passengerIds[index].
+function optionsForPassenger(
+  options: AncillaryOption[],
+  offer: SearchOffer,
+  passengerIndex: number
+): AncillaryOption[] {
+  const passengerId = offer.passengerIds?.[passengerIndex];
+  if (!passengerId) return [];
+  return options.filter((o) => o.passengerIds?.includes(passengerId));
 }
 
 interface AncillarySelection {
@@ -205,8 +222,9 @@ export function SearchForm() {
   const [adults, setAdults] = useState(1);
   const [selectedOffer, setSelectedOffer] = useState<SearchOffer | null>(null);
   const [passengers, setPassengers] = useState<Passenger[]>([emptyPassenger]);
-  const [selectedSeat, setSelectedSeat] = useState<AncillaryOption | null>(null);
-  const [bagQuantities, setBagQuantities] = useState<Record<string, number>>({});
+  // Ključ je indeks putnika u passengers[] (isti obrazac kao samo passengers).
+  const [selectedSeats, setSelectedSeats] = useState<Record<number, AncillaryOption | undefined>>({});
+  const [bagQuantities, setBagQuantities] = useState<Record<number, Record<string, number>>>({});
   const [cardFormError, setCardFormError] = useState<string | null>(null);
 
   const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
@@ -217,18 +235,23 @@ export function SearchForm() {
     queryFn: () => fetchAncillaries(selectedOffer!),
     enabled: selectedOffer !== null,
   });
-  const seatOptions = ancillariesQuery.data?.filter((a) => a.type === "seat") ?? [];
-  const baggageOptions = ancillariesQuery.data?.filter((a) => a.type === "baggage") ?? [];
-  const ancillarySelections: AncillarySelection[] = [
-    ...(selectedSeat ? [{ serviceId: selectedSeat.serviceId, quantity: 1, amount: selectedSeat.price.total }] : []),
-    ...baggageOptions
-      .filter((bag) => (bagQuantities[bag.serviceId] ?? 0) > 0)
-      .map((bag) => ({
-        serviceId: bag.serviceId,
-        quantity: bagQuantities[bag.serviceId],
-        amount: bag.price.total * bagQuantities[bag.serviceId],
-      })),
-  ];
+  const allSeatOptions = ancillariesQuery.data?.filter((a) => a.type === "seat") ?? [];
+  const allBaggageOptions = ancillariesQuery.data?.filter((a) => a.type === "baggage") ?? [];
+  const ancillarySelections: AncillarySelection[] = passengers.flatMap((_, i) => {
+    const seat = selectedSeats[i];
+    const passengerBagQuantities = bagQuantities[i] ?? {};
+    const bagsForPassenger = selectedOffer ? optionsForPassenger(allBaggageOptions, selectedOffer, i) : [];
+    return [
+      ...(seat ? [{ serviceId: seat.serviceId, quantity: 1, amount: seat.price.total }] : []),
+      ...bagsForPassenger
+        .filter((bag) => (passengerBagQuantities[bag.serviceId] ?? 0) > 0)
+        .map((bag) => ({
+          serviceId: bag.serviceId,
+          quantity: passengerBagQuantities[bag.serviceId],
+          amount: bag.price.total * passengerBagQuantities[bag.serviceId],
+        })),
+    ];
+  });
   // 501 (dobavljač ne podržava kartično plaćanje preko sebe, §07) → nema
   // DuffelCardForm-a, tok pada na direktno kreiranje "hold" order-a.
   const paymentSessionQuery = useQuery({
@@ -337,7 +360,7 @@ export function SearchForm() {
                   }`}
                   onClick={() => {
                     setSelectedOffer(offer);
-                    setSelectedSeat(null);
+                    setSelectedSeats({});
                     setBagQuantities({});
                     setPassengers(Array.from({ length: adults }, () => ({ ...emptyPassenger })));
                     bookMutation.reset();
@@ -388,97 +411,108 @@ export function SearchForm() {
           {ancillariesQuery.isLoading && (
             <p className="text-xs text-slate-500">Proveravam dostupna sedišta i prtljag...</p>
           )}
-          {/* Duffel-ov seat_maps/available_services odgovor vezuje sedište i
-              prtljag za njihov interni passenger_id, a mi taj ID ne
-              prikupljamo/pratimo za više putnika u ovoj fazi (§07 — videti
-              komentar u duffel.ts) — zato je izbor ancillary-ja ograničen na
-              rezervacije sa jednim putnikom dok se ne doda mapiranje po
-              putniku. */}
-          {passengers.length === 1 && seatOptions.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Sedište (opciono)</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={`rounded-md border px-2 py-1 text-xs transition ${
-                    selectedSeat === null
-                      ? "border-blue-500 text-blue-400"
-                      : "border-slate-700 text-slate-400 hover:border-slate-500"
-                  }`}
-                  onClick={() => setSelectedSeat(null)}
-                >
-                  Bez izbora
-                </button>
-                {seatOptions.map((seat) => (
-                  <button
-                    key={seat.serviceId}
-                    type="button"
-                    className={`rounded-md border px-2 py-1 text-xs transition ${
-                      selectedSeat?.serviceId === seat.serviceId
-                        ? "border-blue-500 text-blue-400"
-                        : "border-slate-700 text-slate-400 hover:border-slate-500"
-                    }`}
-                    onClick={() => setSelectedSeat(seat)}
-                  >
-                    {seat.label} · +{seat.price.total} {seat.price.currency}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {passengers.length === 1 && baggageOptions.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Dodatni prtljag (opciono)</p>
-              <div className="flex flex-wrap gap-3">
-                {baggageOptions.map((bag) => {
-                  const quantity = bagQuantities[bag.serviceId] ?? 0;
-                  const max = bag.maxQuantity ?? 9;
-                  return (
-                    <div
-                      key={bag.serviceId}
-                      className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300"
-                    >
-                      <span>
-                        +{bag.price.total} {bag.price.currency}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Ukloni prtljag (${bag.label})`}
-                        className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
-                        disabled={quantity === 0}
-                        onClick={() =>
-                          setBagQuantities((q) => ({ ...q, [bag.serviceId]: Math.max(0, quantity - 1) }))
-                        }
-                      >
-                        −
-                      </button>
-                      <span>{quantity}</span>
-                      <button
-                        type="button"
-                        aria-label={`Dodaj prtljag (${bag.label})`}
-                        className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
-                        disabled={quantity >= max}
-                        onClick={() =>
-                          setBagQuantities((q) => ({ ...q, [bag.serviceId]: Math.min(max, quantity + 1) }))
-                        }
-                      >
-                        +
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {passengers.map((passenger, i) => {
             const update = (patch: Partial<Passenger>) =>
               setPassengers(passengers.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
+            // Duffel-ov seat_maps/available_services odgovor vezuje sedište i
+            // prtljag za njihov interni passenger_id (§07) — ovde se
+            // filtriraju samo opcije koje važe za OVOG putnika, poredeći sa
+            // selectedOffer.passengerIds[i] (videti optionsForPassenger).
+            const seatOptions = selectedOffer ? optionsForPassenger(allSeatOptions, selectedOffer, i) : [];
+            const baggageOptions = selectedOffer ? optionsForPassenger(allBaggageOptions, selectedOffer, i) : [];
+            const passengerBagQuantities = bagQuantities[i] ?? {};
+            const selectedSeat = selectedSeats[i] ?? null;
+
             return (
               <div key={i} className="space-y-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Putnik {i + 1}</p>
+
+                {seatOptions.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Sedište (opciono)</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`rounded-md border px-2 py-1 text-xs transition ${
+                          selectedSeat === null
+                            ? "border-blue-500 text-blue-400"
+                            : "border-slate-700 text-slate-400 hover:border-slate-500"
+                        }`}
+                        onClick={() => setSelectedSeats((s) => ({ ...s, [i]: undefined }))}
+                      >
+                        Bez izbora
+                      </button>
+                      {seatOptions.map((seat) => (
+                        <button
+                          key={seat.serviceId}
+                          type="button"
+                          className={`rounded-md border px-2 py-1 text-xs transition ${
+                            selectedSeat?.serviceId === seat.serviceId
+                              ? "border-blue-500 text-blue-400"
+                              : "border-slate-700 text-slate-400 hover:border-slate-500"
+                          }`}
+                          onClick={() => setSelectedSeats((s) => ({ ...s, [i]: seat }))}
+                        >
+                          {seat.label} · +{seat.price.total} {seat.price.currency}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {baggageOptions.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Dodatni prtljag (opciono)</p>
+                    <div className="flex flex-wrap gap-3">
+                      {baggageOptions.map((bag) => {
+                        const quantity = passengerBagQuantities[bag.serviceId] ?? 0;
+                        const max = bag.maxQuantity ?? 9;
+                        return (
+                          <div
+                            key={bag.serviceId}
+                            className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300"
+                          >
+                            <span>
+                              +{bag.price.total} {bag.price.currency}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Ukloni prtljag za putnika ${i + 1} (${bag.label})`}
+                              className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
+                              disabled={quantity === 0}
+                              onClick={() =>
+                                setBagQuantities((q) => ({
+                                  ...q,
+                                  [i]: { ...q[i], [bag.serviceId]: Math.max(0, quantity - 1) },
+                                }))
+                              }
+                            >
+                              −
+                            </button>
+                            <span>{quantity}</span>
+                            <button
+                              type="button"
+                              aria-label={`Dodaj prtljag za putnika ${i + 1} (${bag.label})`}
+                              className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
+                              disabled={quantity >= max}
+                              onClick={() =>
+                                setBagQuantities((q) => ({
+                                  ...q,
+                                  [i]: { ...q[i], [bag.serviceId]: Math.min(max, quantity + 1) },
+                                }))
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <input
                     required
