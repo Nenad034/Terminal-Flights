@@ -1,5 +1,6 @@
 import type { Order } from "@terminal-flights/shared-types";
 import { pool } from "./db.js";
+import { getOrderByIdempotencyKey } from "./queries.js";
 
 const SUPPLIER_LAYER_URL = process.env.SUPPLIER_LAYER_URL ?? "http://localhost:4001";
 
@@ -31,6 +32,13 @@ export interface BookingRequest {
    * odvojeno preko Duffel balance-a.
    */
   cardPayment?: { threeDSecureSessionId: string };
+  /**
+   * Klijent generiše ovo jednom po booking pokušaju i šalje isti ključ na
+   * svaki retry (mrežni retry, duplo kliknuto dugme) — sprečava duplu
+   * rezervaciju/naplatu. Opciono jer stariji/interni pozivi ne moraju da
+   * ga šalju (§05).
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -46,18 +54,32 @@ export interface BookingRequest {
  * nije automatski kao kod Duffel-a) ostaje TODO dok ti adapteri nisu aktivni.
  */
 export async function startBookingSaga(req: BookingRequest): Promise<Order> {
-  const { rows } = await pool.query<{
-    order_id: string;
-    trip_id: string | null;
-    created_at: string;
-    updated_at: string;
-  }>(
-    `INSERT INTO orders (trip_id, supplier_code, status, currency, total_amount)
-     VALUES ($1, $2, 'pending', $3, $4)
-     RETURNING order_id, trip_id, created_at, updated_at`,
-    [req.tripId ?? null, req.supplierCode, req.currency, req.totalAmount]
-  );
-  const row = rows[0];
+  if (req.idempotencyKey) {
+    const existing = await getOrderByIdempotencyKey(req.idempotencyKey);
+    if (existing) return existing;
+  }
+
+  type InsertRow = { order_id: string; trip_id: string | null; created_at: string; updated_at: string };
+  let row: InsertRow;
+  try {
+    const { rows } = await pool.query<InsertRow>(
+      `INSERT INTO orders (trip_id, supplier_code, status, currency, total_amount, idempotency_key)
+       VALUES ($1, $2, 'pending', $3, $4, $5)
+       RETURNING order_id, trip_id, created_at, updated_at`,
+      [req.tripId ?? null, req.supplierCode, req.currency, req.totalAmount, req.idempotencyKey ?? null]
+    );
+    row = rows[0];
+  } catch (err) {
+    // Race: dva skoro istovremena poziva sa istim idempotencyKey mogu oba
+    // proći gornju proveru pre nego što ijedan upiše red — UNIQUE
+    // ograničenje na idempotency_key hvata drugi upis, pa se tu vraća
+    // order koji je prvi upisao, umesto da se propagira sirova DB greška.
+    if (req.idempotencyKey && isUniqueViolation(err)) {
+      const existing = await getOrderByIdempotencyKey(req.idempotencyKey);
+      if (existing) return existing;
+    }
+    throw err;
+  }
 
   let reserved: Order | undefined;
   let paid: Order | undefined;
@@ -124,6 +146,10 @@ async function writeLedgerEntries(orderId: string, req: BookingRequest): Promise
             ($1, 'supplier_payable', 0, $2, $3)`,
     [orderId, req.totalAmount, req.currency]
   );
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "23505"; // Postgres unique_violation
 }
 
 /**

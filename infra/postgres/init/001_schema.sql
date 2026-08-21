@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS orders (
   status TEXT NOT NULL DEFAULT 'pending',
   currency TEXT NOT NULL,
   total_amount NUMERIC(12,2) NOT NULL,
+  -- Klijent šalje isti ključ na svaki retry pokušaj istog booking submit-a
+  -- (mrežni retry, duplo kliknuto dugme) — saga.ts vraća postojeći order
+  -- umesto da napravi drugi, sprečavajući duplu naplatu karticom kod
+  -- dobavljača koji su MoR (§07/§05). NULL dozvoljen jer stariji/interni
+  -- pozivi ne moraju da ga šalju.
+  idempotency_key TEXT UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

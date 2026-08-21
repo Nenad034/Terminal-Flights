@@ -82,7 +82,15 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   ostaje `pending`/held za manuelni review ako plaćanje padne posle uspešne
   rezervacije, `failed` ako rezervacija nikad nije uspela. Eksplicitan
   ticketing korak za GDS dobavljače ostaje `TODO (F1 nastavak)` — Duffel
-  izdaje tiket automatski nakon plaćanja.
+  izdaje tiket automatski nakon plaćanja. **Idempotency**: klijent šalje
+  `idempotencyKey` (generisan po booking pokušaju, isti na svaki retry) —
+  `startBookingSaga` prvo proverava da li već postoji order sa tim ključem i
+  vraća ga umesto da napravi novi; `orders.idempotency_key` ima `UNIQUE`
+  ograničenje u bazi da pokrije i race (dva skoro istovremena poziva), gde se
+  Postgres-ova `23505` greška hvata i tretira isto kao normalan hit.
+  Sprečava duplu rezervaciju/naplatu kod mrežnog retry-ja ili duplog klika —
+  potvrđeno i uživo (dva identična `POST /orders` poziva → jedan red u bazi)
+  i testovima (uključujući simulaciju race-a).
 - **otkazivanje (§08 Post-sale)**: dvostepeno — `POST
   /orders/:orderId/cancellation-quote` traži kotaciju (koliko se refundira,
   bez ikakve nepovratne akcije), `POST /orders/:orderId/cancellation-confirm`
@@ -161,7 +169,10 @@ testove (`go test ./...`):
 
 - **booking**: saga i otkazivanje — mock-uju `pool.query` i `fetch`, pokrivaju
   kompenzacione putanje (QC odbijanje, pad rezervacije, pad plaćanja) jer su
-  se tu do sada dešavale prave greške pri ručnom testiranju.
+  se tu do sada dešavale prave greške pri ručnom testiranju. Idempotency:
+  poznat ključ vraća postojeći order bez ijednog poziva ka dobavljaču,
+  simulacija race-a (UNIQUE constraint `23505` na drugom upisu) takođe
+  vraća postojeći order umesto da propagira sirovu DB grešku.
 - **supplier-layer**: Duffel adapter — mapiranje Offer/Order (search, hold
   order status derivacija, payment→ticketed prelaz), graceful degrade bez
   ključa/na grešku, dvofazno cancellation (default refund vrednosti kad
@@ -173,19 +184,21 @@ testove (`go test ./...`):
 - **search-fanout**: de-dup/ranking (`dedupAndRank`) — zadržavanje
   najjeftinije ponude po itineraru, sortiranje, i orkestracija (`Search`) sa
   mock supplier-layer HTTP serverom (`httptest`) koja proverava da
-  `passengers` polje stvarno stigne do supplier-layer poziva.
+  `passengers` polje i `passengerIds` (§07) stvarno stignu do/od
+  supplier-layer poziva.
 - **web**: `@testing-library/react` + `jsdom` (`vitest.config.ts`, `--environment
   jsdom` preko plugina), fetch mock-ovan po URL-u. `SearchForm` (search →
   izbor ponude → broj formi za putnike prati broj putnika, ancillaries
-  (sedište i prtljag) ograničene na 1 putnika, booking payload, prtljag —
-  količina utiče na ukupnu cenu i na broj ponovljenih ID-jeva u
-  `serviceIds`, ograničenje na `maxQuantity`, quote→confirm cancel tok,
-  prikaz greške sa servera, kartično plaćanje — `@duffel/components` je
-  mokovan jer interno renderuje cross-origin iframe koji jsdom ne može
-  smisleno da izvrši, testira se samo SearchForm-ovo ožičenje:
-  tokenizacija→3DS→booking, neuspeo 3DS, neuspela tokenizacija),
-  `ManageBooking` (loading/error/cancellable stanja, cancel tok),
-  `OrderLookup` (navigacija, trim, prazan unos).
+  (sedište i prtljag) ispravno mapirane po putniku preko `passengerIds`
+  umesto deljene liste, booking payload, prtljag — količina utiče na ukupnu
+  cenu i na broj ponovljenih ID-jeva u `serviceIds`, ograničenje na
+  `maxQuantity`, `idempotencyKey` prisutan u zahtevu i isti na retry istog
+  pokušaja, quote→confirm cancel tok, prikaz greške sa servera, kartično
+  plaćanje — `@duffel/components` je mokovan jer interno renderuje
+  cross-origin iframe koji jsdom ne može smisleno da izvrši, testira se samo
+  SearchForm-ovo ožičenje: tokenizacija→3DS→booking, neuspeo 3DS, neuspela
+  tokenizacija), `ManageBooking` (loading/error/cancellable stanja, cancel
+  tok), `OrderLookup` (navigacija, trim, prazan unos).
 
 CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. `pricing` je
 jedini servis bez automatskih testova (i dalje čist F0 placeholder).

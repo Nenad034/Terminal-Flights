@@ -185,4 +185,67 @@ describe("startBookingSaga", () => {
     const compensationCall = queryMock.mock.calls[1];
     expect(compensationCall[1]).toEqual(["failed", null, "order-1"]);
   });
+
+  it("returns the existing order for a known idempotencyKey without touching the supplier or inserting a new row", async () => {
+    queryMock.mockResolvedValueOnce({
+      rows: [
+        {
+          order_id: "order-1",
+          trip_id: null,
+          supplier_code: "duffel",
+          supplier_order_ref: "ord_ref_1",
+          status: "ticketed",
+          currency: "EUR",
+          total_amount: "100.00",
+          created_at: "t0",
+          updated_at: "t1",
+        },
+      ],
+    });
+
+    const order = await startBookingSaga({
+      ...baseReq,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey: "idem-1",
+    });
+
+    expect(order.orderId).toBe("order-1");
+    expect(order.status).toBe("ticketed");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(queryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the existing order when a concurrent duplicate insert hits the idempotency_key unique constraint", async () => {
+    const uniqueViolation = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+    });
+
+    queryMock
+      .mockResolvedValueOnce({ rows: [] }) // idempotency check: nothing yet
+      .mockRejectedValueOnce(uniqueViolation) // INSERT loses the race
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            order_id: "order-1",
+            trip_id: null,
+            supplier_code: "duffel",
+            supplier_order_ref: "ord_ref_1",
+            status: "ticketed",
+            currency: "EUR",
+            total_amount: "100.00",
+            created_at: "t0",
+            updated_at: "t1",
+          },
+        ],
+      }); // idempotency re-check finds the winner's row
+
+    const order = await startBookingSaga({
+      ...baseReq,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey: "idem-1",
+    });
+
+    expect(order.orderId).toBe("order-1");
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

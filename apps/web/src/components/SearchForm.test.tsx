@@ -206,6 +206,37 @@ describe("SearchForm", () => {
     expect(body.passengers[0]).toMatchObject({ givenName: "Ana", familyName: "Anic" });
     expect(body.serviceIds).toEqual(["ase_1"]);
     expect(body.totalAmount).toBe(offer.price.total + seat.price.total);
+    expect(typeof body.idempotencyKey).toBe("string");
+    expect(body.idempotencyKey.length).toBeGreaterThan(0);
+  });
+
+  it("reuses the same idempotencyKey across retries of the same booking attempt", async () => {
+    let bookingAttempts = 0;
+    mockFetch({
+      ...noCardPayment,
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [] }),
+      "/api/booking": () => {
+        bookingAttempts += 1;
+        return bookingAttempts === 1
+          ? jsonResponse({ error: "network hiccup, please retry" }, false, 503)
+          : jsonResponse({ order: { orderId: "order-1", status: "ticketed" } });
+      },
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    await fillPassenger(0);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+    await screen.findByText(/network hiccup/);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+    await screen.findByText(/Order order-1/);
+
+    const bookingCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0].includes("/api/booking"));
+    expect(bookingCalls).toHaveLength(2);
+    const [firstKey, secondKey] = bookingCalls.map((c) => JSON.parse(c[1].body).idempotencyKey);
+    expect(secondKey).toBe(firstKey);
   });
 
   it("runs the quote-then-confirm cancellation flow after a successful booking", async () => {

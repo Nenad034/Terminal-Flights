@@ -4,8 +4,9 @@ const queryMock = vi.fn();
 vi.mock("./db.js", () => ({ pool: { query: (...args: unknown[]) => queryMock(...args) } }));
 
 let getOrder: typeof import("./queries.js").getOrder;
+let getOrderByIdempotencyKey: typeof import("./queries.js").getOrderByIdempotencyKey;
 beforeAll(async () => {
-  ({ getOrder } = await import("./queries.js"));
+  ({ getOrder, getOrderByIdempotencyKey } = await import("./queries.js"));
 });
 
 beforeEach(() => {
@@ -48,5 +49,36 @@ describe("getOrder", () => {
       createdAt: "t0",
       updatedAt: "t1",
     });
+  });
+});
+
+describe("getOrderByIdempotencyKey", () => {
+  it("returns null when no order has that idempotency key", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] });
+    await expect(getOrderByIdempotencyKey("idem-1")).resolves.toBeNull();
+  });
+
+  it("maps the DB row to the internal Order shape when found", async () => {
+    queryMock.mockResolvedValueOnce({
+      rows: [
+        {
+          order_id: "o1",
+          trip_id: null,
+          supplier_code: "duffel",
+          supplier_order_ref: "ABC123",
+          status: "ticketed",
+          currency: "EUR",
+          total_amount: "199.99",
+          created_at: "t0",
+          updated_at: "t1",
+        },
+      ],
+    });
+
+    const order = await getOrderByIdempotencyKey("idem-1");
+
+    expect(order?.orderId).toBe("o1");
+    expect(queryMock.mock.calls[0][0]).toContain("idempotency_key = $1");
+    expect(queryMock.mock.calls[0][1]).toEqual(["idem-1"]);
   });
 });

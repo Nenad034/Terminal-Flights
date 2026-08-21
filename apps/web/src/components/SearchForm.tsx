@@ -122,12 +122,11 @@ async function bookOffer(
   offer: SearchOffer,
   passengers: Passenger[],
   ancillarySelections: AncillarySelection[],
-  cardPayment: { threeDSecureSessionId: string } | null
+  cardPayment: { threeDSecureSessionId: string } | null,
+  idempotencyKey: string
 ) {
   // Duffel naplaćuje po ponudi, ne po putniku — offer.price.total već
-  // pokriva sve putnike iz search zahteva. Ancillary-ji su trenutno
-  // ograničeni na 1 putnika (vidi komentar u UI-ju) pa ovde nema potrebe za
-  // sumiranjem po putniku.
+  // pokriva sve putnike iz search zahteva.
   const totalAmount = offer.price.total + ancillariesAmount(ancillarySelections);
   const serviceIds = flattenAncillaryIds(ancillarySelections);
 
@@ -141,6 +140,7 @@ async function bookOffer(
       expiresAt: offer.expiresAt,
       currency: offer.price.currency,
       totalAmount,
+      idempotencyKey,
       passengers,
       serviceIds: serviceIds.length > 0 ? serviceIds : undefined,
       cardPayment: cardPayment
@@ -175,14 +175,15 @@ async function payWithCard(
   clientKey: string,
   cardId: string,
   ancillarySelections: AncillarySelection[],
-  passengers: Passenger[]
+  passengers: Passenger[],
+  idempotencyKey: string
 ) {
   const services = ancillarySelections.map((s) => ({ id: s.serviceId, quantity: s.quantity }));
   const session = await createThreeDSecureSession(clientKey, cardId, offer.supplierOfferRef, services, true);
   if (session.status !== "ready_for_payment") {
     throw new Error(`3D Secure autentikacija nije uspela (status: ${session.status})`);
   }
-  return bookOffer(offer, passengers, ancillarySelections, { threeDSecureSessionId: session.id });
+  return bookOffer(offer, passengers, ancillarySelections, { threeDSecureSessionId: session.id }, idempotencyKey);
 }
 
 async function quoteCancellation(orderId: string) {
@@ -226,6 +227,10 @@ export function SearchForm() {
   const [selectedSeats, setSelectedSeats] = useState<Record<number, AncillaryOption | undefined>>({});
   const [bagQuantities, setBagQuantities] = useState<Record<number, Record<string, number>>>({});
   const [cardFormError, setCardFormError] = useState<string | null>(null);
+  // Isti ključ prati sve retry pokušaje jedne rezervacije (mrežni retry,
+  // duplo kliknuto dugme) — booking servis njime sprečava duplu naplatu
+  // (§05). Generiše se ponovo samo kad korisnik izabere (drugu) ponudu.
+  const [idempotencyKey, setIdempotencyKey] = useState("");
 
   const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
 
@@ -260,11 +265,11 @@ export function SearchForm() {
     enabled: selectedOffer !== null,
   });
   const bookMutation = useMutation({
-    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, ancillarySelections, null),
+    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, ancillarySelections, null, idempotencyKey),
   });
   const cardBookMutation = useMutation({
     mutationFn: (cardId: string) =>
-      payWithCard(selectedOffer!, paymentSessionQuery.data!, cardId, ancillarySelections, passengers),
+      payWithCard(selectedOffer!, paymentSessionQuery.data!, cardId, ancillarySelections, passengers, idempotencyKey),
   });
   const bookedOrder = cardBookMutation.data ?? bookMutation.data;
   const isBooking = bookMutation.isPending || cardBookMutation.isPending;
@@ -362,6 +367,7 @@ export function SearchForm() {
                     setSelectedOffer(offer);
                     setSelectedSeats({});
                     setBagQuantities({});
+                    setIdempotencyKey(crypto.randomUUID());
                     setPassengers(Array.from({ length: adults }, () => ({ ...emptyPassenger })));
                     bookMutation.reset();
                   }}
