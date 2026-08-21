@@ -23,6 +23,8 @@ export interface CreateOrderParams {
   offerId: string;
   supplierOfferRef: string;
   passengers: PassengerDetails[];
+  /** ID-jevi ancillary usluga (npr. sedišta) iz getAncillaries(), §07. */
+  serviceIds?: string[];
 }
 
 export interface CancelQuote {
@@ -30,6 +32,13 @@ export interface CancelQuote {
   refundAmount: number;
   refundCurrency: string;
   expiresAt: string;
+}
+
+export interface AncillaryOption {
+  serviceId: string;
+  type: "seat";
+  label: string; // npr. "12A"
+  price: { currency: string; total: number };
 }
 
 /**
@@ -44,6 +53,13 @@ export interface CancelQuote {
 export interface SupplierAdapter {
   readonly code: string;
   search(params: SearchParams): Promise<Offer[]>;
+  /**
+   * Dodatne plaćene usluge dostupne za ponudu (§07 Ancillaries) — trenutno
+   * samo sedišta, jer je to jedini deo Duffel Seat Maps API-ja koji je
+   * potvrđen iz zvanične dokumentacije (prtljag ide kroz drugačiji,
+   * neistražen deo API-ja — namerno nije uveden dok se ne proveri).
+   */
+  getAncillaries?(supplierOfferRef: string): Promise<AncillaryOption[]>;
   createOrder?(params: CreateOrderParams): Promise<Order>;
   /**
    * Plaćanje "hold" order-a. Kod dobavljača koji su merchant of record

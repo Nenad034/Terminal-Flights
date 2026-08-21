@@ -19,8 +19,9 @@ export interface BookingRequest {
   expiresAt: string;
   tripId?: string;
   currency: string;
-  totalAmount: number;
+  totalAmount: number; // mora uključivati cenu izabranih ancillary usluga (§07) — obaveza klijenta koji šalje zahtev
   passengers: BookingPassenger[];
+  serviceIds?: string[];
 }
 
 /**
@@ -126,6 +127,7 @@ async function reserveWithSupplier(req: BookingRequest): Promise<Order> {
       offerId: req.offerId,
       supplierOfferRef: req.supplierOfferRef,
       passengers: req.passengers,
+      serviceIds: req.serviceIds,
     }),
   });
 

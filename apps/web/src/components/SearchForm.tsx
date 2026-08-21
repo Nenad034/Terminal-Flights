@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -46,6 +46,13 @@ interface CancellationQuote {
   expiresAt: string;
 }
 
+interface AncillaryOption {
+  serviceId: string;
+  type: "seat";
+  label: string;
+  price: { currency: string; total: number };
+}
+
 async function searchFlights(params: {
   origin: string;
   destination: string;
@@ -60,7 +67,22 @@ async function searchFlights(params: {
   return (await res.json()) as { offers: SearchOffer[] };
 }
 
-async function bookOffer(offer: SearchOffer, passenger: Passenger) {
+async function fetchAncillaries(offer: SearchOffer) {
+  const res = await fetch("/api/ancillaries", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ supplierCode: offer.supplierCode, supplierOfferRef: offer.supplierOfferRef }),
+  });
+  // 501 (dobavljač ne podržava ancillaries) tretiramo kao "nema opcija", ne kao grešku.
+  if (res.status === 501) return [];
+  const data = (await res.json()) as { options?: AncillaryOption[]; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Ancillaries fetch failed");
+  return data.options!;
+}
+
+async function bookOffer(offer: SearchOffer, passenger: Passenger, seat: AncillaryOption | null) {
+  const totalAmount = offer.price.total + (seat?.price.total ?? 0);
+
   const res = await fetch("/api/booking", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -70,8 +92,9 @@ async function bookOffer(offer: SearchOffer, passenger: Passenger) {
       supplierOfferRef: offer.supplierOfferRef,
       expiresAt: offer.expiresAt,
       currency: offer.price.currency,
-      totalAmount: offer.price.total,
+      totalAmount,
       passengers: [passenger],
+      serviceIds: seat ? [seat.serviceId] : undefined,
     }),
   });
   const data = (await res.json()) as { order?: BookedOrder; error?: string };
@@ -115,10 +138,16 @@ export function SearchForm() {
   const [departureDate, setDepartureDate] = useState("");
   const [selectedOffer, setSelectedOffer] = useState<SearchOffer | null>(null);
   const [passenger, setPassenger] = useState<Passenger>(emptyPassenger);
+  const [selectedSeat, setSelectedSeat] = useState<AncillaryOption | null>(null);
 
   const searchMutation = useMutation({ mutationFn: searchFlights });
+  const ancillariesQuery = useQuery({
+    queryKey: ["ancillaries", selectedOffer?.offerId],
+    queryFn: () => fetchAncillaries(selectedOffer!),
+    enabled: selectedOffer !== null,
+  });
   const bookMutation = useMutation({
-    mutationFn: (p: Passenger) => bookOffer(selectedOffer!, p),
+    mutationFn: (p: Passenger) => bookOffer(selectedOffer!, p, selectedSeat),
   });
   const quoteMutation = useMutation({
     mutationFn: (orderId: string) => quoteCancellation(orderId),
@@ -196,6 +225,7 @@ export function SearchForm() {
                   }`}
                   onClick={() => {
                     setSelectedOffer(offer);
+                    setSelectedSeat(null);
                     bookMutation.reset();
                   }}
                 >
@@ -226,8 +256,46 @@ export function SearchForm() {
           }}
         >
           <p className="text-sm text-slate-300">
-            Rezervacija za {selectedOffer.price.total} {selectedOffer.price.currency} — podaci putnika
+            Rezervacija za {selectedOffer.price.total + (selectedSeat?.price.total ?? 0)}{" "}
+            {selectedOffer.price.currency} — podaci putnika
           </p>
+
+          {ancillariesQuery.isLoading && (
+            <p className="text-xs text-slate-500">Proveravam dostupna sedišta...</p>
+          )}
+          {ancillariesQuery.isSuccess && ancillariesQuery.data.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Sedište (opciono)</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={`rounded-md border px-2 py-1 text-xs transition ${
+                    selectedSeat === null
+                      ? "border-blue-500 text-blue-400"
+                      : "border-slate-700 text-slate-400 hover:border-slate-500"
+                  }`}
+                  onClick={() => setSelectedSeat(null)}
+                >
+                  Bez izbora
+                </button>
+                {ancillariesQuery.data.map((seat) => (
+                  <button
+                    key={seat.serviceId}
+                    type="button"
+                    className={`rounded-md border px-2 py-1 text-xs transition ${
+                      selectedSeat?.serviceId === seat.serviceId
+                        ? "border-blue-500 text-blue-400"
+                        : "border-slate-700 text-slate-400 hover:border-slate-500"
+                    }`}
+                    onClick={() => setSelectedSeat(seat)}
+                  >
+                    {seat.label} · +{seat.price.total} {seat.price.currency}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               required

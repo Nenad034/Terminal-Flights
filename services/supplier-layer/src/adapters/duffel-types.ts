@@ -91,3 +91,43 @@ export interface DuffelOrderCancellation {
 export interface DuffelOrderCancellationResponse {
   data: DuffelOrderCancellation;
 }
+
+// Seat Maps API — https://duffel.com/docs/api/seat-maps
+// Presek potvrđen iz zvanične dokumentacije: cabins → rows → sections →
+// elements, gde selektabilna sedišta imaju type "seat" i available_services.
+export interface DuffelSeatService {
+  id: string;
+  passenger_id: string;
+  total_amount: string;
+  total_currency: string;
+}
+
+export interface DuffelSeatMapElement {
+  type: string; // "seat" za selektabilna sedišta, ostalo (npr. "bassinet_seat", "empty") preskačemo
+  designator?: string;
+  name?: string;
+  available_services?: DuffelSeatService[];
+}
+
+export interface DuffelSeatMapSection {
+  elements: DuffelSeatMapElement[];
+}
+
+export interface DuffelSeatMapRow {
+  sections: DuffelSeatMapSection[];
+}
+
+export interface DuffelSeatMapCabin {
+  rows: DuffelSeatMapRow[];
+}
+
+export interface DuffelSeatMap {
+  id: string;
+  segment_id: string;
+  slice_id: string;
+  cabins: DuffelSeatMapCabin[];
+}
+
+export interface DuffelSeatMapResponse {
+  data: DuffelSeatMap[];
+}

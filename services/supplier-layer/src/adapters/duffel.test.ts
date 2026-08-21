@@ -105,6 +105,67 @@ describe("DuffelAdapter.search", () => {
   });
 });
 
+describe("DuffelAdapter.getAncillaries", () => {
+  it("returns [] without calling the API when no key is configured", async () => {
+    const adapter = new DuffelAdapter("");
+    await expect(adapter.getAncillaries("off_1")).resolves.toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("flattens the seat map into a flat list, skipping non-seat elements", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: [
+          {
+            id: "sea_1",
+            segment_id: "seg_1",
+            slice_id: "sli_1",
+            cabins: [
+              {
+                rows: [
+                  {
+                    sections: [
+                      {
+                        elements: [
+                          {
+                            type: "seat",
+                            designator: "12A",
+                            name: "Standard seat",
+                            available_services: [
+                              { id: "ase_1", passenger_id: "pas_1", total_amount: "15.00", total_currency: "EUR" },
+                            ],
+                          },
+                          { type: "empty" },
+                          { type: "seat", designator: "12B" }, // no available_services -> no options
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    const options = await adapter.getAncillaries("off_1");
+
+    expect(options).toEqual([{ serviceId: "ase_1", type: "seat", label: "12A", price: { currency: "EUR", total: 15 } }]);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/air/seat_maps?offer_id=off_1"),
+      expect.any(Object)
+    );
+  });
+
+  it("throws on a failed seat map request", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse({ errors: [] }, false, 404));
+    const adapter = new DuffelAdapter("test_key");
+    await expect(adapter.getAncillaries("off_1")).rejects.toThrow(/seat map fetch failed/);
+  });
+});
+
 describe("DuffelAdapter.createOrder", () => {
   it("creates a hold order and derives status from payment_status/documents", async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
@@ -145,6 +206,55 @@ describe("DuffelAdapter.createOrder", () => {
     expect(body.data.type).toBe("hold");
     expect(body.data.selected_offers).toEqual(["off_1"]);
     expect(body.data.passengers[0]).toMatchObject({ given_name: "Test", family_name: "User" });
+  });
+
+  it("includes selected ancillary services in the request body when provided", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "ord_1",
+          booking_reference: "ABC123",
+          total_amount: "214.99",
+          total_currency: "EUR",
+          payment_status: { awaiting_payment: true, payment_required_by: null, price_guarantee_expires_at: null },
+          documents: [],
+        },
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    await adapter.createOrder({
+      offerId: "duffel:off_1",
+      supplierOfferRef: "off_1",
+      passengers: [],
+      serviceIds: ["ase_1"],
+    });
+
+    const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.data.services).toEqual([{ id: "ase_1", quantity: 1 }]);
+  });
+
+  it("omits the services field entirely when no ancillaries are selected", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "ord_1",
+          booking_reference: "ABC123",
+          total_amount: "199.99",
+          total_currency: "EUR",
+          payment_status: { awaiting_payment: true, payment_required_by: null, price_guarantee_expires_at: null },
+          documents: [],
+        },
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    await adapter.createOrder({ offerId: "duffel:off_1", supplierOfferRef: "off_1", passengers: [] });
+
+    const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.data.services).toBeUndefined();
   });
 
   it("throws with the Duffel error body on failure", async () => {

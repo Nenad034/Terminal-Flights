@@ -34,6 +34,30 @@ app.post("/search", async (req, res) => {
   res.json({ offers: results.flat() });
 });
 
+// Web klijent (§07 Ancillaries) traži dostupna sedišta za ponudu pre nego
+// što korisnik ide na booking. 501 ako adapter ne podržava ancillaries.
+app.get("/offers/:supplierOfferRef/ancillaries", async (req, res) => {
+  const { supplierOfferRef } = req.params;
+  const { supplierCode } = req.query;
+  const adapter = adapters.find((a) => a.code === supplierCode);
+
+  if (!adapter) {
+    res.status(404).json({ error: `unknown supplier: ${supplierCode}` });
+    return;
+  }
+  if (!adapter.getAncillaries) {
+    res.status(501).json({ error: `supplier ${supplierCode} does not support ancillaries yet` });
+    return;
+  }
+
+  try {
+    const options = await adapter.getAncillaries(supplierOfferRef);
+    res.json({ options });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 // Booking saga (§05) poziva ovo da napravi order kod konkretnog dobavljača.
 // 501 ako adapter za taj supplierCode ne podržava createOrder (npr. jer nije
 // još sertifikovan — Amadeus/Sabre/Travelport/Travelfusion stub-ovi, §03).

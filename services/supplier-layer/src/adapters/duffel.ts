@@ -1,11 +1,12 @@
 import type { FareRules, FlightSegment, Offer, Order } from "@terminal-flights/shared-types";
-import type { CancelQuote, CreateOrderParams, SearchParams, SupplierAdapter } from "./adapter.js";
+import type { AncillaryOption, CancelQuote, CreateOrderParams, SearchParams, SupplierAdapter } from "./adapter.js";
 import type {
   DuffelOffer,
   DuffelOfferRequestResponse,
   DuffelOrderCancellationResponse,
   DuffelOrderResponse,
   DuffelPaymentResponse,
+  DuffelSeatMapResponse,
   DuffelSegment,
 } from "./duffel-types.js";
 
@@ -135,6 +136,51 @@ export class DuffelAdapter implements SupplierAdapter {
   }
 
   /**
+   * Sedišta dostupna za ponudu (§07 Ancillaries). Spljoštava Duffel-ovu
+   * ugnježdenu strukturu (cabins → rows → sections → elements) u ravnu listu
+   * — dovoljno za jednostavan UI izbor sedišta, ne za vizuelni seat-map.
+   */
+  async getAncillaries(supplierOfferRef: string): Promise<AncillaryOption[]> {
+    if (!this.apiKey) {
+      // Isti obrazac kao search() — bez ključa, prazna lista umesto pucanja.
+      return [];
+    }
+
+    const res = await fetch(`${this.apiBase}/air/seat_maps?offer_id=${supplierOfferRef}`, {
+      headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", "Duffel-Version": "v2" },
+    });
+
+    if (!res.ok) {
+      throw new Error(`[duffel] seat map fetch failed: ${res.status} ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as DuffelSeatMapResponse;
+    const options: AncillaryOption[] = [];
+
+    for (const seatMap of json.data) {
+      for (const cabin of seatMap.cabins) {
+        for (const row of cabin.rows) {
+          for (const section of row.sections) {
+            for (const element of section.elements) {
+              if (element.type !== "seat" || !element.designator) continue;
+              for (const service of element.available_services ?? []) {
+                options.push({
+                  serviceId: service.id,
+                  type: "seat",
+                  label: element.designator,
+                  price: { currency: service.total_currency, total: Number(service.total_amount) },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return options;
+  }
+
+  /**
    * Kreira order kao "hold" (bez odmah izvršenog plaćanja) — plaćanje ide kroz
    * poseban payments korak u booking sagi (§05), koji poziva
    * POST /air/payments nakon što ovaj order postoji. To booking sagi daje
@@ -154,6 +200,15 @@ export class DuffelAdapter implements SupplierAdapter {
           email: p.email,
           phone_number: p.phoneNumber,
         })),
+        // NAPOMENA: { id, quantity } oblik je izveden iz Duffel-ove opšte
+        // "services" konvencije (vidi se u odgovorima order-a), ali tačan
+        // request oblik za POST /air/orders nije nezavisno potvrđen iz
+        // zvanične dokumentacije (stranica ne sadrži pun primer). Proveriti
+        // u sandbox-u pre produkcije — ako je pogrešan, Duffel će vratiti
+        // 422 validation error, ne tiho pogrešnu rezervaciju.
+        ...(params.serviceIds && params.serviceIds.length > 0
+          ? { services: params.serviceIds.map((id) => ({ id, quantity: 1 })) }
+          : {}),
       },
     };
 

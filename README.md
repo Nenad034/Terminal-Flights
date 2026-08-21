@@ -93,6 +93,16 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   `/booking/[orderId]` prikazuje status i nudi isti quote→confirm cancel tok;
   početna strana ima lookup formu (unos order ID-a), a uspešna rezervacija
   nudi link ka toj stranici za kasniji pregled.
+- **ancillaries (§07)**: samo sedišta za sada — Duffel Seat Maps API je jedini
+  deo ancillary API-ja potvrđen iz zvanične dokumentacije (prtljag je
+  namerno izostavljen dok se ne istraži). `GET
+  /offers/:supplierOfferRef/ancillaries?supplierCode=...` na supplier-layer-u,
+  izloženo kroz `/api/ancillaries` na webu; korisnik bira sedište pre
+  rezervacije, cena se dodaje u `totalAmount`. **Napomena**: tačan oblik
+  `services` polja u Duffel-ovom `POST /air/orders` telu (za vezivanje
+  izabranog sedišta na order) nije nezavisno potvrđen iz dokumentacije —
+  izveden je iz opšte konvencije, treba proveriti u sandbox-u pre produkcije
+  (vidi komentar u `duffel.ts`).
 - **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
   + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
   presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni
