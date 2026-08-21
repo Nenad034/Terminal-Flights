@@ -107,22 +107,26 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
 - **naplata od korisnika (§07)**: arhitektura eksplicitno kaže da je Duffel
   merchant of record i sam skida sredstva sa korisnika — nema potrebe za
   sopstvenim PSP-om (Stripe/Adyen) dok ne postoji aktivan GDS dobavljač gde bi
-  *mi* bili MoR. Server-side deo je gotov: `POST /payment-sessions` generiše
-  Duffel "component client key" (`identity/component_client_keys`), a
-  `createOrder` pravi order kao `type: "instant"` sa `payments: [{type:
-  "card", ..., three_d_secure_session_id}]` kad je kartica priložena —
-  booking saga prepoznaje da je takav order već plaćen i preskače odvojeni
-  balance korak. **Frontend deo NIJE implementiran** — Duffel-ova client-side
-  komponenta za kartice (`@duffel/components`, `DuffelCardForm`,
-  `createCardForTemporaryUse()`, `createThreeDSecureSession()`) ima
-  imperativni API čiji tačan oblik nisam mogao pouzdano da potvrdim iz
-  dokumentacije (nema pristupa paketu/tipovima), pa nisam pisao pogađanu
-  integraciju. Sledeći korak: instalirati `@duffel/components` u `apps/web`,
-  pratiti https://duffel.com/docs/guides/card-form-component-with-3dsecure
-  i https://duffel.com/docs/guides/collecting-customer-card-payments, uzeti
-  `componentClientKey` sa `/api/payment-sessions` (BFF proxy još ne postoji,
-  treba dodati), prikazati `DuffelCardForm`, dobiti `three_d_secure_session_id`
-  i poslati ga kao `cardPayment.threeDSecureSessionId` u booking zahtevu.
+  *mi* bili MoR. Kompletan tok je implementiran, server i klijent: `POST
+  /payment-sessions` generiše Duffel "component client key"
+  (`identity/component_client_keys`), izloženo kroz `/api/payment-sessions`
+  BFF proxy na webu. Klijent (`@duffel/components`, tačni tipovi potvrđeni
+  direktno iz instaliranog paketa, ne samo iz docs stranica) prikazuje
+  `DuffelCardForm` (PCI-compliant iframe — broj kartice nikad ne prolazi kroz
+  naš kod), preko `useDuffelCardFormActions().createCardForTemporaryUse()`
+  tokenizuje karticu, pa `createThreeDSecureSession(clientKey, cardId,
+  supplierOfferRef, services, true)` traži 3DS autentikaciju za tačan iznos.
+  Kad sesija vrati `status: "ready_for_payment"`, `three_d_secure_session_id`
+  ide u booking zahtev kao `cardPayment.threeDSecureSessionId` — booking saga
+  pravi order kao `type: "instant"` sa `payments: [{type: "card", ...}]` i
+  preskače odvoljeni balance korak jer je već plaćen. Ako dobavljač ne
+  podržava kartično plaćanje preko sebe (`/payment-sessions` vrati 501, npr.
+  Amadeus/Sabre/Travelport/Travelfusion stub-ovi), UI graciozno pada na
+  postojeći "hold" tok bez kartice. Testirano end-to-end uživo (pravi Duffel
+  401 bez API ključa potvrđuje da ceo lanac BFF → supplier-layer → adapter
+  radi — vidi napomenu o Duffel ključu ispod), i vitest testovima koji
+  mokuju `@duffel/components` (uspešna tokenizacija+3DS+booking, neuspeo
+  3DS, neuspela tokenizacija kartice).
 - **search-fanout**: de-dup (isti let od više dobavljača → zadrži najjeftiniji)
   + ranking po ceni implementirani (§04). Puniji ranking (trajanje,
   presedanja, korisnički signali) ostaje za kasnije, kad postoje stvarni
@@ -131,11 +135,10 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   data warehouse ima dovoljno istorije.
 - **web**: search forma ima broj putnika (1-9), prikazuje ponude, klik na
   ponudu otvara formu po jedan blok za svakog putnika i šalje rezervaciju
-  preko `/api/booking` BFF proxy-ja. I dalje F1 skeleton — bez UI-ja za
-  plaćanje karticom (backend za to postoji, §07, ali frontend komponenta
-  namerno nije implementirana, videti gore). Sedište (ancillaries) je
-  namerno ograničeno na rezervacije sa 1 putnikom dok se ne doda mapiranje
-  sedišta po putniku (Duffel `passenger_id` iz seat map-e).
+  preko `/api/booking` BFF proxy-ja. Ima i UI za kartično plaćanje (§07,
+  videti gore). I dalje F1 skeleton. Sedište (ancillaries) je namerno
+  ograničeno na rezervacije sa 1 putnikom dok se ne doda mapiranje sedišta
+  po putniku (Duffel `passenger_id` iz seat map-e).
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").
@@ -162,8 +165,11 @@ testove (`go test ./...`):
   jsdom` preko plugina), fetch mock-ovan po URL-u. `SearchForm` (search →
   izbor ponude → broj formi za putnike prati broj putnika, ancillaries
   ograničene na 1 putnika, booking payload, quote→confirm cancel tok, prikaz
-  greške sa servera), `ManageBooking` (loading/error/cancellable stanja,
-  cancel tok), `OrderLookup` (navigacija, trim, prazan unos).
+  greške sa servera, kartično plaćanje — `@duffel/components` je mokovan jer
+  interno renderuje cross-origin iframe koji jsdom ne može smisleno da
+  izvrši, testira se samo SearchForm-ovo ožičenje: tokenizacija→3DS→booking,
+  neuspeo 3DS, neuspela tokenizacija), `ManageBooking` (loading/error/cancellable
+  stanja, cancel tok), `OrderLookup` (navigacija, trim, prazan unos).
 
 CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. `pricing` je
 jedini servis bez automatskih testova (i dalje čist F0 placeholder).

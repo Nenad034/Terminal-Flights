@@ -1,5 +1,6 @@
 "use client";
 
+import { DuffelCardForm, createThreeDSecureSession, useDuffelCardFormActions } from "@duffel/components";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -81,7 +82,12 @@ async function fetchAncillaries(offer: SearchOffer) {
   return data.options!;
 }
 
-async function bookOffer(offer: SearchOffer, passengers: Passenger[], seat: AncillaryOption | null) {
+async function bookOffer(
+  offer: SearchOffer,
+  passengers: Passenger[],
+  seat: AncillaryOption | null,
+  cardPayment: { threeDSecureSessionId: string } | null
+) {
   // Duffel naplaćuje po ponudi, ne po putniku — offer.price.total već
   // pokriva sve putnike iz search zahteva. Sedište je trenutno ograničeno na
   // 1 putnika (vidi komentar u UI-ju) pa ovde nema potrebe za sumiranjem po
@@ -100,11 +106,46 @@ async function bookOffer(offer: SearchOffer, passengers: Passenger[], seat: Anci
       totalAmount,
       passengers,
       serviceIds: seat ? [seat.serviceId] : undefined,
+      cardPayment: cardPayment
+        ? { threeDSecureSessionId: cardPayment.threeDSecureSessionId, amount: totalAmount, currency: offer.price.currency }
+        : undefined,
     }),
   });
   const data = (await res.json()) as { order?: BookedOrder; error?: string };
   if (!res.ok) throw new Error(data.error ?? "Booking failed");
   return data.order!;
+}
+
+async function fetchPaymentSession(supplierCode: string) {
+  const res = await fetch("/api/payment-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ supplierCode }),
+  });
+  // 501 (dobavljač ne podržava kartično plaćanje preko sebe) tretiramo kao
+  // "nema kartičnog plaćanja", ne kao grešku — pada se na "hold" tok.
+  if (res.status === 501) return null;
+  const data = (await res.json()) as { componentClientKey?: string; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Payment session fetch failed");
+  return data.componentClientKey!;
+}
+
+// Vodi klijent kroz Duffel-ov 3DS tok (§07): kartica je već tokenizovana
+// (cardId, iz DuffelCardForm-a), ovde se traži 3DS sesija za tačan iznos i
+// tek onda šalje order sa payments:[{type:"card", three_d_secure_session_id}].
+async function payWithCard(
+  offer: SearchOffer,
+  clientKey: string,
+  cardId: string,
+  seat: AncillaryOption | null,
+  passengers: Passenger[]
+) {
+  const services = seat ? [{ id: seat.serviceId, quantity: 1 }] : [];
+  const session = await createThreeDSecureSession(clientKey, cardId, offer.supplierOfferRef, services, true);
+  if (session.status !== "ready_for_payment") {
+    throw new Error(`3D Secure autentikacija nije uspela (status: ${session.status})`);
+  }
+  return bookOffer(offer, passengers, seat, { threeDSecureSessionId: session.id });
 }
 
 async function quoteCancellation(orderId: string) {
@@ -145,6 +186,9 @@ export function SearchForm() {
   const [selectedOffer, setSelectedOffer] = useState<SearchOffer | null>(null);
   const [passengers, setPassengers] = useState<Passenger[]>([emptyPassenger]);
   const [selectedSeat, setSelectedSeat] = useState<AncillaryOption | null>(null);
+  const [cardFormError, setCardFormError] = useState<string | null>(null);
+
+  const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
 
   const searchMutation = useMutation({ mutationFn: searchFlights });
   const ancillariesQuery = useQuery({
@@ -152,14 +196,32 @@ export function SearchForm() {
     queryFn: () => fetchAncillaries(selectedOffer!),
     enabled: selectedOffer !== null,
   });
-  const bookMutation = useMutation({
-    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, selectedSeat),
+  // 501 (dobavljač ne podržava kartično plaćanje preko sebe, §07) → nema
+  // DuffelCardForm-a, tok pada na direktno kreiranje "hold" order-a.
+  const paymentSessionQuery = useQuery({
+    queryKey: ["payment-session", selectedOffer?.supplierCode],
+    queryFn: () => fetchPaymentSession(selectedOffer!.supplierCode),
+    enabled: selectedOffer !== null,
   });
+  const bookMutation = useMutation({
+    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, selectedSeat, null),
+  });
+  const cardBookMutation = useMutation({
+    mutationFn: (cardId: string) =>
+      payWithCard(selectedOffer!, paymentSessionQuery.data!, cardId, selectedSeat, passengers),
+  });
+  const bookedOrder = cardBookMutation.data ?? bookMutation.data;
+  const isBooking = bookMutation.isPending || cardBookMutation.isPending;
+  const bookingErrorMessage =
+    cardFormError ??
+    (bookMutation.error as Error | null)?.message ??
+    (cardBookMutation.error as Error | null)?.message ??
+    null;
   const quoteMutation = useMutation({
     mutationFn: (orderId: string) => quoteCancellation(orderId),
   });
   const confirmMutation = useMutation({
-    mutationFn: (ref: string) => confirmCancellation(bookMutation.data!.orderId, ref),
+    mutationFn: (ref: string) => confirmCancellation(bookedOrder!.orderId, ref),
   });
 
   return (
@@ -270,7 +332,18 @@ export function SearchForm() {
           className="space-y-3 border-t border-slate-800 pt-4"
           onSubmit={(e) => {
             e.preventDefault();
-            bookMutation.mutate(passengers);
+            setCardFormError(null);
+            bookMutation.reset();
+            cardBookMutation.reset();
+            if (paymentSessionQuery.data) {
+              // Karta se tokenizuje u Duffel-ovom iframe-u (broj kartice
+              // nikad ne prolazi kroz naš kod) — rezultat stiže preko
+              // onCreateCardForTemporaryUseSuccess/-Failure ispod, koji
+              // nastavljaju na 3DS + booking (payWithCard).
+              createCardForTemporaryUse();
+            } else {
+              bookMutation.mutate(passengers);
+            }
           }}
         >
           <p className="text-sm text-slate-300">
@@ -376,25 +449,38 @@ export function SearchForm() {
               </div>
             );
           })}
+
+          {paymentSessionQuery.data && (
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Podaci kartice</p>
+              <div className="rounded-md border border-slate-700 bg-slate-950 p-3">
+                <DuffelCardForm
+                  ref={cardFormRef}
+                  clientKey={paymentSessionQuery.data}
+                  intent="to-create-card-for-temporary-use"
+                  onCreateCardForTemporaryUseSuccess={(card) => cardBookMutation.mutate(card.id)}
+                  onCreateCardForTemporaryUseFailure={(err) => setCardFormError(err.message)}
+                />
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
             className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
-            disabled={bookMutation.isPending}
+            disabled={isBooking}
           >
-            {bookMutation.isPending ? "Rezervišem..." : "Rezerviši"}
+            {isBooking ? "Rezervišem..." : "Rezerviši"}
           </button>
 
-          {bookMutation.isError && (
-            <p className="text-sm text-red-400">{(bookMutation.error as Error).message}</p>
-          )}
-          {bookMutation.isSuccess && (
+          {bookingErrorMessage && <p className="text-sm text-red-400">{bookingErrorMessage}</p>}
+          {bookedOrder && (
             <div className="space-y-2 text-sm text-emerald-400">
               <p>
-                Order {bookMutation.data.orderId} → status:{" "}
-                {confirmMutation.data?.status ?? bookMutation.data.status}
-                {bookMutation.data.supplierOrderRef && ` (PNR: ${bookMutation.data.supplierOrderRef})`}
+                Order {bookedOrder.orderId} → status: {confirmMutation.data?.status ?? bookedOrder.status}
+                {bookedOrder.supplierOrderRef && ` (PNR: ${bookedOrder.supplierOrderRef})`}
               </p>
-              <Link href={`/booking/${bookMutation.data.orderId}`} className="text-slate-400 underline">
+              <Link href={`/booking/${bookedOrder.orderId}`} className="text-slate-400 underline">
                 Sačuvaj link za kasniji pregled rezervacije
               </Link>
 
@@ -407,7 +493,7 @@ export function SearchForm() {
                       type="button"
                       className="rounded-md border border-red-500 px-3 py-1.5 text-red-400 transition hover:bg-red-950/40 disabled:opacity-50"
                       disabled={quoteMutation.isPending}
-                      onClick={() => quoteMutation.mutate(bookMutation.data.orderId)}
+                      onClick={() => quoteMutation.mutate(bookedOrder.orderId)}
                     >
                       {quoteMutation.isPending ? "Proveravam uslove..." : "Otkaži rezervaciju"}
                     </button>

@@ -1,8 +1,45 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createThreeDSecureSession } from "@duffel/components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQueryClient } from "@/test-utils";
 import { SearchForm } from "./SearchForm";
+
+// @duffel/components renders a cross-origin iframe internally (PCI-compliant
+// card tokenization) — not renderable/useful in jsdom. We fake just enough of
+// its surface to exercise SearchForm's wiring: capture the success/failure
+// callbacks passed to DuffelCardForm, and let the mocked
+// useDuffelCardFormActions' createCardForTemporaryUse invoke them, mirroring
+// how the real iframe posts a message back after tokenizing the card.
+// (`forwardRef` is imported inside the async factory, not at module top
+// level, because vi.mock factories are hoisted above regular imports.)
+let latestCardSuccess: ((data: { id: string }) => void) | undefined;
+let latestCardFailure: ((error: { message: string }) => void) | undefined;
+
+vi.mock("@duffel/components", async () => {
+  const { forwardRef } = await import("react");
+  return {
+    DuffelCardForm: forwardRef(
+      (
+        props: {
+          onCreateCardForTemporaryUseSuccess?: (data: { id: string }) => void;
+          onCreateCardForTemporaryUseFailure?: (error: { message: string }) => void;
+        },
+        _ref
+      ) => {
+        latestCardSuccess = props.onCreateCardForTemporaryUseSuccess;
+        latestCardFailure = props.onCreateCardForTemporaryUseFailure;
+        return null;
+      }
+    ),
+    useDuffelCardFormActions: () => ({
+      ref: { current: null },
+      saveCard: () => {},
+      createCardForTemporaryUse: () => latestCardSuccess?.({ id: "tcd_1" }),
+    }),
+    createThreeDSecureSession: vi.fn(),
+  };
+});
 
 const offer = {
   offerId: "duffel:off_1",
@@ -55,7 +92,11 @@ async function fillPassenger(index: number) {
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+  latestCardSuccess = undefined;
+  latestCardFailure = undefined;
 });
+
+const noCardPayment = { "/api/payment-sessions": () => jsonResponse({ error: "not supported" }, false, 501) };
 
 describe("SearchForm", () => {
   it("renders with default search values", () => {
@@ -92,6 +133,7 @@ describe("SearchForm", () => {
 
   it("renders one passenger form block per adult and shows seat selection for a single passenger", async () => {
     mockFetch({
+      ...noCardPayment,
       "/api/search": () => jsonResponse({ offers: [offer] }),
       "/api/ancillaries": () => jsonResponse({ options: [seat] }),
     });
@@ -106,6 +148,7 @@ describe("SearchForm", () => {
 
   it("hides seat selection when there is more than one passenger, even if seats are available", async () => {
     mockFetch({
+      ...noCardPayment,
       "/api/search": () => jsonResponse({ offers: [offer] }),
       "/api/ancillaries": () => jsonResponse({ options: [seat] }),
     });
@@ -123,6 +166,7 @@ describe("SearchForm", () => {
 
   it("submits a booking with all passengers and the selected seat's serviceId", async () => {
     mockFetch({
+      ...noCardPayment,
       "/api/search": () => jsonResponse({ offers: [offer] }),
       "/api/ancillaries": () => jsonResponse({ options: [seat] }),
       "/api/booking": () => jsonResponse({ order: { orderId: "order-1", status: "ticketed", supplierOrderRef: "ABC123" } }),
@@ -149,6 +193,7 @@ describe("SearchForm", () => {
 
   it("runs the quote-then-confirm cancellation flow after a successful booking", async () => {
     mockFetch({
+      ...noCardPayment,
       "/api/search": () => jsonResponse({ offers: [offer] }),
       "/api/ancillaries": () => jsonResponse({ options: [] }),
       "/api/booking/order-1/cancellation-quote": () =>
@@ -174,6 +219,7 @@ describe("SearchForm", () => {
 
   it("surfaces the server error message when booking fails", async () => {
     mockFetch({
+      ...noCardPayment,
       "/api/search": () => jsonResponse({ offers: [offer] }),
       "/api/ancillaries": () => jsonResponse({ options: [] }),
       "/api/booking": () => jsonResponse({ error: "offer expired, cannot proceed to booking" }, false, 500),
@@ -186,5 +232,69 @@ describe("SearchForm", () => {
     await user.click(screen.getByRole("button", { name: "Rezerviši" }));
 
     expect(await screen.findByText(/offer expired/)).toBeInTheDocument();
+  });
+
+  it("collects card payment via DuffelCardForm and books with the resulting 3DS session", async () => {
+    (createThreeDSecureSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: "ready_for_payment",
+      id: "3ds_1",
+    });
+    mockFetch({
+      "/api/payment-sessions": () => jsonResponse({ componentClientKey: "key_1" }),
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [] }),
+      "/api/booking": () => jsonResponse({ order: { orderId: "order-1", status: "ticketed", supplierOrderRef: "ABC123" } }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    await fillPassenger(0);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+
+    expect(await screen.findByText(/Order order-1/)).toBeInTheDocument();
+    expect(createThreeDSecureSession).toHaveBeenCalledWith("key_1", "tcd_1", offer.supplierOfferRef, [], true);
+
+    const bookingCall = (fetch as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[0].includes("/api/booking"));
+    const body = JSON.parse(bookingCall![1].body);
+    expect(body.cardPayment).toEqual({
+      threeDSecureSessionId: "3ds_1",
+      amount: offer.price.total,
+      currency: offer.price.currency,
+    });
+  });
+
+  it("surfaces an error when 3D Secure authentication does not succeed", async () => {
+    (createThreeDSecureSession as ReturnType<typeof vi.fn>).mockResolvedValue({ status: "failed", id: "3ds_1" });
+    mockFetch({
+      "/api/payment-sessions": () => jsonResponse({ componentClientKey: "key_1" }),
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [] }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    await fillPassenger(0);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+
+    expect(await screen.findByText(/3D Secure autentikacija nije uspela/)).toBeInTheDocument();
+  });
+
+  it("surfaces an error when the card form itself fails to tokenize the card", async () => {
+    mockFetch({
+      "/api/payment-sessions": () => jsonResponse({ componentClientKey: "key_1" }),
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [] }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    await waitFor(() => expect(latestCardFailure).toBeDefined());
+
+    act(() => latestCardFailure!({ message: "invalid card number" }));
+
+    expect(await screen.findByText(/invalid card number/)).toBeInTheDocument();
   });
 });
