@@ -131,19 +131,20 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   data warehouse ima dovoljno istorije.
 - **web**: search forma ima broj putnika (1-9), prikazuje ponude, klik na
   ponudu otvara formu po jedan blok za svakog putnika i šalje rezervaciju
-  preko `/api/booking` BFF proxy-ja. I dalje F1 skeleton — bez plaćanja
-  karticom (customer-facing PSP još ne postoji, §07). Sedište (ancillaries)
-  je namerno ograničeno na rezervacije sa 1 putnikom dok se ne doda
-  mapiranje sedišta po putniku (Duffel `passenger_id` iz seat map-e).
+  preko `/api/booking` BFF proxy-ja. I dalje F1 skeleton — bez UI-ja za
+  plaćanje karticom (backend za to postoji, §07, ali frontend komponenta
+  namerno nije implementirana, videti gore). Sedište (ancillaries) je
+  namerno ograničeno na rezervacije sa 1 putnikom dok se ne doda mapiranje
+  sedišta po putniku (Duffel `passenger_id` iz seat map-e).
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").
 
 ## Testovi
 
-`services/booking` i `services/supplier-layer` imaju vitest jedinične
+`services/booking`, `services/supplier-layer` i `apps/web` imaju vitest
 testove (`pnpm test` za ceo workspace preko `--if-present`, ili
-`pnpm --filter <ime> test` za jedan servis), `services/search-fanout` ima Go
+`pnpm --filter <ime> test` za jedan paket), `services/search-fanout` ima Go
 testove (`go test ./...`):
 
 - **booking**: saga i otkazivanje — mock-uju `pool.query` i `fetch`, pokrivaju
@@ -157,6 +158,12 @@ testove (`go test ./...`):
   najjeftinije ponude po itineraru, sortiranje, i orkestracija (`Search`) sa
   mock supplier-layer HTTP serverom (`httptest`) koja proverava da
   `passengers` polje stvarno stigne do supplier-layer poziva.
+- **web**: `@testing-library/react` + `jsdom` (`vitest.config.ts`, `--environment
+  jsdom` preko plugina), fetch mock-ovan po URL-u. `SearchForm` (search →
+  izbor ponude → broj formi za putnike prati broj putnika, ancillaries
+  ograničene na 1 putnika, booking payload, quote→confirm cancel tok, prikaz
+  greške sa servera), `ManageBooking` (loading/error/cancellable stanja,
+  cancel tok), `OrderLookup` (navigacija, trim, prazan unos).
 
-CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. Ostali servisi
-(pricing, web) još nemaju automatske testove.
+CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. `pricing` je
+jedini servis bez automatskih testova (i dalje čist F0 placeholder).
