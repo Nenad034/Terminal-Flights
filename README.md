@@ -102,3 +102,14 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
 
 Prati tok opisan u `docs/00-MAPA-MODULA.html` (dugme "Prikaži tok kupovine
 karte").
+
+## Testovi
+
+`services/booking` ima vitest jedinične testove (`pnpm --filter
+@terminal-flights/booking test`, ili `pnpm test` za ceo workspace preko
+`--if-present`) za sagu i otkazivanje — mock-uju `pool.query` i `fetch`, bez
+potrebe za pravom bazom/servisima. Pokrivaju kompenzacione putanje (QC
+odbijanje, pad rezervacije, pad plaćanja) jer su se tu do sada dešavale prave
+greške pri ručnom testiranju. CI (`.github/workflows/ci.yml`) ih pokreće pre
+build koraka. Ostali servisi (supplier-layer, search-fanout, pricing, web)
+još nemaju automatske testove.
