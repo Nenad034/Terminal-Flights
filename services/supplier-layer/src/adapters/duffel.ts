@@ -4,6 +4,7 @@ import type {
   DuffelComponentClientKeyResponse,
   DuffelOffer,
   DuffelOfferRequestResponse,
+  DuffelOfferWithAvailableServicesResponse,
   DuffelOrderCancellationResponse,
   DuffelOrderResponse,
   DuffelPaymentResponse,
@@ -137,9 +138,10 @@ export class DuffelAdapter implements SupplierAdapter {
   }
 
   /**
-   * Sedišta dostupna za ponudu (§07 Ancillaries). Spljoštava Duffel-ovu
-   * ugnježdenu strukturu (cabins → rows → sections → elements) u ravnu listu
-   * — dovoljno za jednostavan UI izbor sedišta, ne za vizuelni seat-map.
+   * Dodatne plaćene usluge za ponudu (§07 Ancillaries): sedišta + prtljag.
+   * Dva nezavisna Duffel API poziva jer žive na različitim endpoint-ima
+   * (seat maps vs. ponuda sa `return_available_services=true`) — jedan koji
+   * padne ne sme da obori drugi, pa se svaki gracioznо svodi na [] na grešku.
    */
   async getAncillaries(supplierOfferRef: string): Promise<AncillaryOption[]> {
     if (!this.apiKey) {
@@ -147,12 +149,26 @@ export class DuffelAdapter implements SupplierAdapter {
       return [];
     }
 
+    const [seats, baggage] = await Promise.all([
+      this.getSeatOptions(supplierOfferRef),
+      this.getBaggageOptions(supplierOfferRef),
+    ]);
+    return [...seats, ...baggage];
+  }
+
+  /**
+   * Sedišta dostupna za ponudu. Spljoštava Duffel-ovu ugnježdenu strukturu
+   * (cabins → rows → sections → elements) u ravnu listu — dovoljno za
+   * jednostavan UI izbor sedišta, ne za vizuelni seat-map.
+   */
+  private async getSeatOptions(supplierOfferRef: string): Promise<AncillaryOption[]> {
     const res = await fetch(`${this.apiBase}/air/seat_maps?offer_id=${supplierOfferRef}`, {
       headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", "Duffel-Version": "v2" },
     });
 
     if (!res.ok) {
-      throw new Error(`[duffel] seat map fetch failed: ${res.status} ${await res.text()}`);
+      console.error(`[duffel] seat map fetch failed: ${res.status} ${await res.text()}`);
+      return [];
     }
 
     const json = (await res.json()) as DuffelSeatMapResponse;
@@ -179,6 +195,35 @@ export class DuffelAdapter implements SupplierAdapter {
     }
 
     return options;
+  }
+
+  /**
+   * Dodatni prtljag — Duffel ga ne izlaže preko seat_maps, nego kao
+   * `available_services` na samoj ponudi, dostupno samo kad se ponuda ponovo
+   * pročita sa `return_available_services=true` (potvrđeno iz "Adding Extra
+   * Bags" vodiča i Offers šeme; `metadata` sa težinom/dimenzijama nije
+   * dokumentovan pa se ne koristi — vidi napomenu u duffel-types.ts).
+   */
+  private async getBaggageOptions(supplierOfferRef: string): Promise<AncillaryOption[]> {
+    const res = await fetch(`${this.apiBase}/air/offers/${supplierOfferRef}?return_available_services=true`, {
+      headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", "Duffel-Version": "v2" },
+    });
+
+    if (!res.ok) {
+      console.error(`[duffel] offer available_services fetch failed: ${res.status} ${await res.text()}`);
+      return [];
+    }
+
+    const json = (await res.json()) as DuffelOfferWithAvailableServicesResponse;
+    return (json.data.available_services ?? [])
+      .filter((service) => service.type === "baggage")
+      .map((service) => ({
+        serviceId: service.id,
+        type: "baggage" as const,
+        label: "Dodatni prtljag",
+        price: { currency: service.total_currency, total: Number(service.total_amount) },
+        maxQuantity: service.maximum_quantity,
+      }));
   }
 
   /**
@@ -230,14 +275,13 @@ export class DuffelAdapter implements SupplierAdapter {
           email: p.email,
           phone_number: p.phoneNumber,
         })),
-        // NAPOMENA: { id, quantity } oblik je izveden iz Duffel-ove opšte
-        // "services" konvencije (vidi se u odgovorima order-a), ali tačan
-        // request oblik za POST /air/orders nije nezavisno potvrđen iz
-        // zvanične dokumentacije (stranica ne sadrži pun primer). Proveriti
-        // u sandbox-u pre produkcije — ako je pogrešan, Duffel će vratiti
-        // 422 validation error, ne tiho pogrešnu rezervaciju.
+        // { id, quantity } oblik potvrđen iz zvanične dokumentacije ("Adding
+        // Extra Bags" vodič). serviceIds je ravna lista (isti ID ponovljen
+        // onoliko puta koliki je quantity — npr. dve iste torbe → ID dvaput)
+        // da bi ostatak sistema (booking saga, frontend) mogao jednostavno
+        // da sabira cene bez posebnog quantity polja; ovde se grupiše nazad.
         ...(params.serviceIds && params.serviceIds.length > 0
-          ? { services: params.serviceIds.map((id) => ({ id, quantity: 1 })) }
+          ? { services: this.groupServiceIds(params.serviceIds) }
           : {}),
         ...(params.cardPayment
           ? {
@@ -271,6 +315,12 @@ export class DuffelAdapter implements SupplierAdapter {
 
     const json = (await res.json()) as DuffelOrderResponse;
     return this.toOrder(json.data, params.offerId);
+  }
+
+  private groupServiceIds(serviceIds: string[]): Array<{ id: string; quantity: number }> {
+    const quantities = new Map<string, number>();
+    for (const id of serviceIds) quantities.set(id, (quantities.get(id) ?? 0) + 1);
+    return Array.from(quantities.entries()).map(([id, quantity]) => ({ id, quantity }));
   }
 
   /**

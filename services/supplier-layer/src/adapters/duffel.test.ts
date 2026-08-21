@@ -133,42 +133,50 @@ describe("DuffelAdapter.getAncillaries", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  // getSeatOptions() i getBaggageOptions() rade preko Promise.all — u kodu
+  // se seat_maps fetch pokreće pre baggage fetch-a (sinhrono, pre prvog
+  // await-a u svakoj funkciji), pa mockResolvedValueOnce redosled ovde
+  // odgovara: 1. seat_maps, 2. offer available_services.
+  const emptyBaggageResponse = () => jsonResponse({ data: { available_services: [] } });
+
   it("flattens the seat map into a flat list, skipping non-seat elements", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      jsonResponse({
-        data: [
-          {
-            id: "sea_1",
-            segment_id: "seg_1",
-            slice_id: "sli_1",
-            cabins: [
-              {
-                rows: [
-                  {
-                    sections: [
-                      {
-                        elements: [
-                          {
-                            type: "seat",
-                            designator: "12A",
-                            name: "Standard seat",
-                            available_services: [
-                              { id: "ase_1", passenger_id: "pas_1", total_amount: "15.00", total_currency: "EUR" },
-                            ],
-                          },
-                          { type: "empty" },
-                          { type: "seat", designator: "12B" }, // no available_services -> no options
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      })
-    );
+    (fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: "sea_1",
+              segment_id: "seg_1",
+              slice_id: "sli_1",
+              cabins: [
+                {
+                  rows: [
+                    {
+                      sections: [
+                        {
+                          elements: [
+                            {
+                              type: "seat",
+                              designator: "12A",
+                              name: "Standard seat",
+                              available_services: [
+                                { id: "ase_1", passenger_id: "pas_1", total_amount: "15.00", total_currency: "EUR" },
+                              ],
+                            },
+                            { type: "empty" },
+                            { type: "seat", designator: "12B" }, // no available_services -> no options
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(emptyBaggageResponse());
 
     const adapter = new DuffelAdapter("test_key");
     const options = await adapter.getAncillaries("off_1");
@@ -180,10 +188,74 @@ describe("DuffelAdapter.getAncillaries", () => {
     );
   });
 
-  it("throws on a failed seat map request", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse({ errors: [] }, false, 404));
+  it("degrades gracefully (returns [] for that source) on a failed seat map request, without losing baggage options", async () => {
+    (fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(jsonResponse({ errors: [] }, false, 404))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            available_services: [
+              {
+                id: "ase_bag_1",
+                type: "baggage",
+                total_amount: "20.00",
+                total_currency: "EUR",
+                segment_ids: ["seg_1"],
+                passenger_ids: ["pas_1"],
+                maximum_quantity: 2,
+              },
+            ],
+          },
+        })
+      );
+
     const adapter = new DuffelAdapter("test_key");
-    await expect(adapter.getAncillaries("off_1")).rejects.toThrow(/seat map fetch failed/);
+    const options = await adapter.getAncillaries("off_1");
+
+    expect(options).toEqual([
+      { serviceId: "ase_bag_1", type: "baggage", label: "Dodatni prtljag", price: { currency: "EUR", total: 20 }, maxQuantity: 2 },
+    ]);
+  });
+
+  it("maps baggage available_services, filtering out non-baggage service types", async () => {
+    (fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(jsonResponse({ data: [] }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            available_services: [
+              {
+                id: "ase_bag_1",
+                type: "baggage",
+                total_amount: "20.00",
+                total_currency: "EUR",
+                segment_ids: [],
+                passenger_ids: [],
+                maximum_quantity: 3,
+              },
+              { id: "ase_other", type: "some_future_service", total_amount: "5.00", total_currency: "EUR", segment_ids: [], passenger_ids: [], maximum_quantity: 1 },
+            ],
+          },
+        })
+      );
+
+    const adapter = new DuffelAdapter("test_key");
+    const options = await adapter.getAncillaries("off_1");
+
+    expect(options).toEqual([
+      { serviceId: "ase_bag_1", type: "baggage", label: "Dodatni prtljag", price: { currency: "EUR", total: 20 }, maxQuantity: 3 },
+    ]);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/air/offers/off_1?return_available_services=true"),
+      expect.any(Object)
+    );
+  });
+
+  it("degrades gracefully to [] for baggage when that request fails, without losing seat options", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse({ data: [] })).mockResolvedValueOnce(jsonResponse({ errors: [] }, false, 500));
+
+    const adapter = new DuffelAdapter("test_key");
+    await expect(adapter.getAncillaries("off_1")).resolves.toEqual([]);
   });
 });
 
@@ -286,6 +358,36 @@ describe("DuffelAdapter.createOrder", () => {
     const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     const body = JSON.parse(requestInit.body);
     expect(body.data.services).toEqual([{ id: "ase_1", quantity: 1 }]);
+  });
+
+  it("groups repeated serviceIds into a single entry with the matching quantity (e.g. two extra bags)", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "ord_1",
+          booking_reference: "ABC123",
+          total_amount: "239.99",
+          total_currency: "EUR",
+          payment_status: { awaiting_payment: true, payment_required_by: null, price_guarantee_expires_at: null },
+          documents: [],
+        },
+      })
+    );
+
+    const adapter = new DuffelAdapter("test_key");
+    await adapter.createOrder({
+      offerId: "duffel:off_1",
+      supplierOfferRef: "off_1",
+      passengers: [],
+      serviceIds: ["ase_bag_1", "ase_bag_1", "ase_seat_1"],
+    });
+
+    const [, requestInit] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.data.services).toEqual([
+      { id: "ase_bag_1", quantity: 2 },
+      { id: "ase_seat_1", quantity: 1 },
+    ]);
   });
 
   it("omits the services field entirely when no ancillaries are selected", async () => {

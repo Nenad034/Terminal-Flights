@@ -140,3 +140,27 @@ export interface DuffelSeatMap {
 export interface DuffelSeatMapResponse {
   data: DuffelSeatMap[];
 }
+
+// Available services (baggage) na ponudi — https://duffel.com/docs/api/v2/offers
+// GET /air/offers/:id?return_available_services=true. Šema potvrđena iz
+// zvanične dokumentacije (Adding Extra Bags guide + Offers schema): id, type,
+// total_currency/total_amount, segment_ids/passenger_ids, maximum_quantity.
+// `metadata` (npr. maksimalna težina/dimenzije) nije dokumentovan — namerno
+// izostavljen dok se ne potvrdi, isti obrazac kao kod ostalih nesigurnih polja.
+export interface DuffelAvailableService {
+  id: string;
+  type: string; // "baggage" za dodatni prtljag, ostalo (buduće vrste) preskačemo
+  total_amount: string;
+  total_currency: string;
+  segment_ids: string[];
+  passenger_ids: string[];
+  maximum_quantity: number;
+}
+
+export interface DuffelOfferWithAvailableServices extends DuffelOffer {
+  available_services?: DuffelAvailableService[];
+}
+
+export interface DuffelOfferWithAvailableServicesResponse {
+  data: DuffelOfferWithAvailableServices;
+}

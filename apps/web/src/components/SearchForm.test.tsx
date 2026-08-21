@@ -51,6 +51,13 @@ const offer = {
 };
 
 const seat = { serviceId: "ase_1", type: "seat" as const, label: "12A", price: { currency: "EUR", total: 15 } };
+const bag = {
+  serviceId: "ase_bag_1",
+  type: "baggage" as const,
+  label: "Dodatni prtljag",
+  price: { currency: "EUR", total: 20 },
+  maxQuantity: 3,
+};
 
 function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 400) {
   return Promise.resolve({ ok, status, json: () => Promise.resolve(body) });
@@ -296,5 +303,50 @@ describe("SearchForm", () => {
     act(() => latestCardFailure!({ message: "invalid card number" }));
 
     expect(await screen.findByText(/invalid card number/)).toBeInTheDocument();
+  });
+
+  it("adds extra baggage quantities to the total and to the booking payload", async () => {
+    mockFetch({
+      ...noCardPayment,
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [bag] }),
+      "/api/booking": () => jsonResponse({ order: { orderId: "order-1", status: "ticketed" } }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    await screen.findByText(/Dodatni prtljag/);
+
+    await user.click(screen.getByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" }));
+    await user.click(screen.getByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" }));
+
+    expect(await screen.findByText(new RegExp(`Rezervacija za ${offer.price.total + 2 * bag.price.total}`))).toBeInTheDocument();
+
+    await fillPassenger(0);
+    await user.click(screen.getByRole("button", { name: "Rezerviši" }));
+
+    expect(await screen.findByText(/Order order-1/)).toBeInTheDocument();
+
+    const bookingCall = (fetch as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[0].includes("/api/booking"));
+    const body = JSON.parse(bookingCall![1].body);
+    expect(body.serviceIds).toEqual([bag.serviceId, bag.serviceId]);
+    expect(body.totalAmount).toBe(offer.price.total + 2 * bag.price.total);
+  });
+
+  it("does not let the baggage quantity exceed maxQuantity", async () => {
+    mockFetch({
+      ...noCardPayment,
+      "/api/search": () => jsonResponse({ offers: [offer] }),
+      "/api/ancillaries": () => jsonResponse({ options: [{ ...bag, maxQuantity: 1 }] }),
+    });
+    const user = userEvent.setup();
+    renderWithQueryClient(<SearchForm />);
+
+    await searchAndSelectOffer(user);
+    const addButton = await screen.findByRole("button", { name: "Dodaj prtljag (Dodatni prtljag)" });
+
+    await user.click(addButton);
+    expect(addButton).toBeDisabled();
   });
 });

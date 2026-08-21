@@ -49,9 +49,16 @@ interface CancellationQuote {
 
 interface AncillaryOption {
   serviceId: string;
-  type: "seat";
+  type: "seat" | "baggage";
   label: string;
   price: { currency: string; total: number };
+  maxQuantity?: number;
+}
+
+interface AncillarySelection {
+  serviceId: string;
+  quantity: number;
+  amount: number;
 }
 
 async function searchFlights(params: {
@@ -82,17 +89,30 @@ async function fetchAncillaries(offer: SearchOffer) {
   return data.options!;
 }
 
+// Pretvara izabrane ancillary-je (sedište + prtljag sa količinama) u ravnu
+// listu serviceId-jeva — isti ID ponovljen onoliko puta koliki je quantity
+// (npr. dve iste torbe → ID dvaput). Supplier-layer grupiše nazad po
+// dobavljaču (§07, videti komentar u duffel.ts createOrder).
+function flattenAncillaryIds(selections: AncillarySelection[]): string[] {
+  return selections.flatMap((s) => Array(s.quantity).fill(s.serviceId));
+}
+
+function ancillariesAmount(selections: AncillarySelection[]): number {
+  return selections.reduce((sum, s) => sum + s.amount, 0);
+}
+
 async function bookOffer(
   offer: SearchOffer,
   passengers: Passenger[],
-  seat: AncillaryOption | null,
+  ancillarySelections: AncillarySelection[],
   cardPayment: { threeDSecureSessionId: string } | null
 ) {
   // Duffel naplaćuje po ponudi, ne po putniku — offer.price.total već
-  // pokriva sve putnike iz search zahteva. Sedište je trenutno ograničeno na
-  // 1 putnika (vidi komentar u UI-ju) pa ovde nema potrebe za sumiranjem po
-  // putniku.
-  const totalAmount = offer.price.total + (seat?.price.total ?? 0);
+  // pokriva sve putnike iz search zahteva. Ancillary-ji su trenutno
+  // ograničeni na 1 putnika (vidi komentar u UI-ju) pa ovde nema potrebe za
+  // sumiranjem po putniku.
+  const totalAmount = offer.price.total + ancillariesAmount(ancillarySelections);
+  const serviceIds = flattenAncillaryIds(ancillarySelections);
 
   const res = await fetch("/api/booking", {
     method: "POST",
@@ -105,7 +125,7 @@ async function bookOffer(
       currency: offer.price.currency,
       totalAmount,
       passengers,
-      serviceIds: seat ? [seat.serviceId] : undefined,
+      serviceIds: serviceIds.length > 0 ? serviceIds : undefined,
       cardPayment: cardPayment
         ? { threeDSecureSessionId: cardPayment.threeDSecureSessionId, amount: totalAmount, currency: offer.price.currency }
         : undefined,
@@ -137,15 +157,15 @@ async function payWithCard(
   offer: SearchOffer,
   clientKey: string,
   cardId: string,
-  seat: AncillaryOption | null,
+  ancillarySelections: AncillarySelection[],
   passengers: Passenger[]
 ) {
-  const services = seat ? [{ id: seat.serviceId, quantity: 1 }] : [];
+  const services = ancillarySelections.map((s) => ({ id: s.serviceId, quantity: s.quantity }));
   const session = await createThreeDSecureSession(clientKey, cardId, offer.supplierOfferRef, services, true);
   if (session.status !== "ready_for_payment") {
     throw new Error(`3D Secure autentikacija nije uspela (status: ${session.status})`);
   }
-  return bookOffer(offer, passengers, seat, { threeDSecureSessionId: session.id });
+  return bookOffer(offer, passengers, ancillarySelections, { threeDSecureSessionId: session.id });
 }
 
 async function quoteCancellation(orderId: string) {
@@ -186,6 +206,7 @@ export function SearchForm() {
   const [selectedOffer, setSelectedOffer] = useState<SearchOffer | null>(null);
   const [passengers, setPassengers] = useState<Passenger[]>([emptyPassenger]);
   const [selectedSeat, setSelectedSeat] = useState<AncillaryOption | null>(null);
+  const [bagQuantities, setBagQuantities] = useState<Record<string, number>>({});
   const [cardFormError, setCardFormError] = useState<string | null>(null);
 
   const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
@@ -196,6 +217,18 @@ export function SearchForm() {
     queryFn: () => fetchAncillaries(selectedOffer!),
     enabled: selectedOffer !== null,
   });
+  const seatOptions = ancillariesQuery.data?.filter((a) => a.type === "seat") ?? [];
+  const baggageOptions = ancillariesQuery.data?.filter((a) => a.type === "baggage") ?? [];
+  const ancillarySelections: AncillarySelection[] = [
+    ...(selectedSeat ? [{ serviceId: selectedSeat.serviceId, quantity: 1, amount: selectedSeat.price.total }] : []),
+    ...baggageOptions
+      .filter((bag) => (bagQuantities[bag.serviceId] ?? 0) > 0)
+      .map((bag) => ({
+        serviceId: bag.serviceId,
+        quantity: bagQuantities[bag.serviceId],
+        amount: bag.price.total * bagQuantities[bag.serviceId],
+      })),
+  ];
   // 501 (dobavljač ne podržava kartično plaćanje preko sebe, §07) → nema
   // DuffelCardForm-a, tok pada na direktno kreiranje "hold" order-a.
   const paymentSessionQuery = useQuery({
@@ -204,11 +237,11 @@ export function SearchForm() {
     enabled: selectedOffer !== null,
   });
   const bookMutation = useMutation({
-    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, selectedSeat, null),
+    mutationFn: (p: Passenger[]) => bookOffer(selectedOffer!, p, ancillarySelections, null),
   });
   const cardBookMutation = useMutation({
     mutationFn: (cardId: string) =>
-      payWithCard(selectedOffer!, paymentSessionQuery.data!, cardId, selectedSeat, passengers),
+      payWithCard(selectedOffer!, paymentSessionQuery.data!, cardId, ancillarySelections, passengers),
   });
   const bookedOrder = cardBookMutation.data ?? bookMutation.data;
   const isBooking = bookMutation.isPending || cardBookMutation.isPending;
@@ -305,6 +338,7 @@ export function SearchForm() {
                   onClick={() => {
                     setSelectedOffer(offer);
                     setSelectedSeat(null);
+                    setBagQuantities({});
                     setPassengers(Array.from({ length: adults }, () => ({ ...emptyPassenger })));
                     bookMutation.reset();
                   }}
@@ -347,19 +381,20 @@ export function SearchForm() {
           }}
         >
           <p className="text-sm text-slate-300">
-            Rezervacija za {selectedOffer.price.total + (selectedSeat?.price.total ?? 0)}{" "}
+            Rezervacija za {selectedOffer.price.total + ancillariesAmount(ancillarySelections)}{" "}
             {selectedOffer.price.currency} — podaci putnika ({passengers.length})
           </p>
 
           {ancillariesQuery.isLoading && (
-            <p className="text-xs text-slate-500">Proveravam dostupna sedišta...</p>
+            <p className="text-xs text-slate-500">Proveravam dostupna sedišta i prtljag...</p>
           )}
-          {/* Duffel-ov seat_maps odgovor vezuje sedište za njihov interni
-              passenger_id, a mi taj ID ne prikupljamo/pratimo za više
-              putnika u ovoj fazi (§07 — videti komentar u duffel.ts) — zato
-              je izbor sedišta ograničen na rezervacije sa jednim putnikom
-              dok se ne doda mapiranje po putniku. */}
-          {passengers.length === 1 && ancillariesQuery.isSuccess && ancillariesQuery.data.length > 0 && (
+          {/* Duffel-ov seat_maps/available_services odgovor vezuje sedište i
+              prtljag za njihov interni passenger_id, a mi taj ID ne
+              prikupljamo/pratimo za više putnika u ovoj fazi (§07 — videti
+              komentar u duffel.ts) — zato je izbor ancillary-ja ograničen na
+              rezervacije sa jednim putnikom dok se ne doda mapiranje po
+              putniku. */}
+          {passengers.length === 1 && seatOptions.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-slate-500">Sedište (opciono)</p>
               <div className="flex flex-wrap gap-2">
@@ -374,7 +409,7 @@ export function SearchForm() {
                 >
                   Bez izbora
                 </button>
-                {ancillariesQuery.data.map((seat) => (
+                {seatOptions.map((seat) => (
                   <button
                     key={seat.serviceId}
                     type="button"
@@ -388,6 +423,51 @@ export function SearchForm() {
                     {seat.label} · +{seat.price.total} {seat.price.currency}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {passengers.length === 1 && baggageOptions.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Dodatni prtljag (opciono)</p>
+              <div className="flex flex-wrap gap-3">
+                {baggageOptions.map((bag) => {
+                  const quantity = bagQuantities[bag.serviceId] ?? 0;
+                  const max = bag.maxQuantity ?? 9;
+                  return (
+                    <div
+                      key={bag.serviceId}
+                      className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300"
+                    >
+                      <span>
+                        +{bag.price.total} {bag.price.currency}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Ukloni prtljag (${bag.label})`}
+                        className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
+                        disabled={quantity === 0}
+                        onClick={() =>
+                          setBagQuantities((q) => ({ ...q, [bag.serviceId]: Math.max(0, quantity - 1) }))
+                        }
+                      >
+                        −
+                      </button>
+                      <span>{quantity}</span>
+                      <button
+                        type="button"
+                        aria-label={`Dodaj prtljag (${bag.label})`}
+                        className="rounded border border-slate-600 px-1.5 text-slate-300 transition hover:border-slate-400 disabled:opacity-30"
+                        disabled={quantity >= max}
+                        onClick={() =>
+                          setBagQuantities((q) => ({ ...q, [bag.serviceId]: Math.min(max, quantity + 1) }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -94,16 +94,20 @@ Svi servisi imaju `/health` i osnovnu strukturu (**F0**). F1 je u toku:
   `/booking/[orderId]` prikazuje status i nudi isti quote→confirm cancel tok;
   početna strana ima lookup formu (unos order ID-a), a uspešna rezervacija
   nudi link ka toj stranici za kasniji pregled.
-- **ancillaries (§07)**: samo sedišta za sada — Duffel Seat Maps API je jedini
-  deo ancillary API-ja potvrđen iz zvanične dokumentacije (prtljag je
-  namerno izostavljen dok se ne istraži). `GET
-  /offers/:supplierOfferRef/ancillaries?supplierCode=...` na supplier-layer-u,
-  izloženo kroz `/api/ancillaries` na webu; korisnik bira sedište pre
-  rezervacije, cena se dodaje u `totalAmount`. **Napomena**: tačan oblik
-  `services` polja u Duffel-ovom `POST /air/orders` telu (za vezivanje
-  izabranog sedišta na order) nije nezavisno potvrđen iz dokumentacije —
-  izveden je iz opšte konvencije, treba proveriti u sandbox-u pre produkcije
-  (vidi komentar u `duffel.ts`).
+- **ancillaries (§07)**: sedišta (Duffel Seat Maps API) i dodatni prtljag
+  (Duffel `available_services` na ponudi, `GET
+  /air/offers/:id?return_available_services=true` — potvrđeno iz zvanične
+  dokumentacije, "Adding Extra Bags" vodič). `GET
+  /offers/:supplierOfferRef/ancillaries?supplierCode=...` na supplier-layer-u
+  vraća oba tipa u jednoj ravnoj listi (`type: "seat" | "baggage"`), izloženo
+  kroz `/api/ancillaries` na webu; korisnik bira sedište i količinu prtljaga
+  pre rezervacije, cena se dodaje u `totalAmount`. `POST /air/orders`
+  `services` polje je sad potvrđeno iz dokumentacije (`{id, quantity}`, isti
+  primer se koristi i za prtljag) — ranija napomena o nesigurnosti tog oblika
+  više ne važi za ovaj deo; `metadata` sa težinom/dimenzijama torbe i dalje
+  nije dokumentovan pa nije korišćen. Ancillary izbor je i dalje ograničen na
+  rezervacije sa 1 putnikom (Duffel vezuje i sedišta i prtljag za njihov
+  interni `passenger_id`, koji ne pratimo po našem putniku).
 - **naplata od korisnika (§07)**: arhitektura eksplicitno kaže da je Duffel
   merchant of record i sam skida sredstva sa korisnika — nema potrebe za
   sopstvenim PSP-om (Stripe/Adyen) dok ne postoji aktivan GDS dobavljač gde bi
@@ -156,7 +160,11 @@ testove (`go test ./...`):
 - **supplier-layer**: Duffel adapter — mapiranje Offer/Order (search, hold
   order status derivacija, payment→ticketed prelaz), graceful degrade bez
   ključa/na grešku, dvofazno cancellation (default refund vrednosti kad
-  Duffel vrati `null`).
+  Duffel vrati `null`), ancillaries (sedišta i prtljag se dohvataju sa dva
+  nezavisna Duffel poziva preko `Promise.all` — pad jednog ne sme da obori
+  drugi, pokriveno testom za svaki smer), grupisanje ponovljenih
+  `serviceIds` u `{id, quantity}` pri kreiranju order-a (za više komada
+  istog prtljaga).
 - **search-fanout**: de-dup/ranking (`dedupAndRank`) — zadržavanje
   najjeftinije ponude po itineraru, sortiranje, i orkestracija (`Search`) sa
   mock supplier-layer HTTP serverom (`httptest`) koja proverava da
@@ -164,12 +172,15 @@ testove (`go test ./...`):
 - **web**: `@testing-library/react` + `jsdom` (`vitest.config.ts`, `--environment
   jsdom` preko plugina), fetch mock-ovan po URL-u. `SearchForm` (search →
   izbor ponude → broj formi za putnike prati broj putnika, ancillaries
-  ograničene na 1 putnika, booking payload, quote→confirm cancel tok, prikaz
-  greške sa servera, kartično plaćanje — `@duffel/components` je mokovan jer
-  interno renderuje cross-origin iframe koji jsdom ne može smisleno da
-  izvrši, testira se samo SearchForm-ovo ožičenje: tokenizacija→3DS→booking,
-  neuspeo 3DS, neuspela tokenizacija), `ManageBooking` (loading/error/cancellable
-  stanja, cancel tok), `OrderLookup` (navigacija, trim, prazan unos).
+  (sedište i prtljag) ograničene na 1 putnika, booking payload, prtljag —
+  količina utiče na ukupnu cenu i na broj ponovljenih ID-jeva u
+  `serviceIds`, ograničenje na `maxQuantity`, quote→confirm cancel tok,
+  prikaz greške sa servera, kartično plaćanje — `@duffel/components` je
+  mokovan jer interno renderuje cross-origin iframe koji jsdom ne može
+  smisleno da izvrši, testira se samo SearchForm-ovo ožičenje:
+  tokenizacija→3DS→booking, neuspeo 3DS, neuspela tokenizacija),
+  `ManageBooking` (loading/error/cancellable stanja, cancel tok),
+  `OrderLookup` (navigacija, trim, prazan unos).
 
 CI (`.github/workflows/ci.yml`) ih pokreće pre build koraka. `pricing` je
 jedini servis bez automatskih testova (i dalje čist F0 placeholder).

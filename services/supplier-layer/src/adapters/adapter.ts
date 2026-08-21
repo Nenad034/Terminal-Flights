@@ -52,9 +52,11 @@ export interface CancelQuote {
 
 export interface AncillaryOption {
   serviceId: string;
-  type: "seat";
-  label: string; // npr. "12A"
+  type: "seat" | "baggage";
+  label: string; // npr. "12A" za sedište, "Dodatni prtljag" za baggage
   price: { currency: string; total: number };
+  /** Samo za type "baggage" — Duffel-ovo ograničenje koliko se puta ova usluga može dodati. */
+  maxQuantity?: number;
 }
 
 /**
@@ -70,10 +72,9 @@ export interface SupplierAdapter {
   readonly code: string;
   search(params: SearchParams): Promise<Offer[]>;
   /**
-   * Dodatne plaćene usluge dostupne za ponudu (§07 Ancillaries) — trenutno
-   * samo sedišta, jer je to jedini deo Duffel Seat Maps API-ja koji je
-   * potvrđen iz zvanične dokumentacije (prtljag ide kroz drugačiji,
-   * neistražen deo API-ja — namerno nije uveden dok se ne proveri).
+   * Dodatne plaćene usluge dostupne za ponudu (§07 Ancillaries) — sedišta
+   * (Duffel Seat Maps API) i dodatni prtljag (Duffel available_services na
+   * ponudi, `GET /air/offers/:id?return_available_services=true`).
    */
   getAncillaries?(supplierOfferRef: string): Promise<AncillaryOption[]>;
   /**
